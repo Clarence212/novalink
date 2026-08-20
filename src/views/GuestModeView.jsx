@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Calendar, Mail, X, CheckCircle } from 'lucide-react';
+import { apiSendOtp, apiVerifyOtp, apiSendNotification } from '../services/api';
 
 export const GuestModeView = () => {
   const { facilities, reservations, addReservation, sendSimulatedEmail, showToast, setIsGuestMode } = useApp();
@@ -15,19 +16,21 @@ export const GuestModeView = () => {
   const guestFacilities = facilities.filter(f => f.isActive && f.guestBookable);
   const timeSlots = ['8:00 AM - 12:00 PM', '12:00 PM - 4:00 PM', '4:00 PM - 8:00 PM', '9:00 AM - 1:00 PM', '1:00 PM - 5:00 PM'];
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     sendSimulatedEmail(guestInfo.email, 'NovaLink Guest Verification Code', 'Your verification code is: 5566');
+    apiSendOtp(guestInfo.email, guestInfo.fullName || 'Guest', 'guest').catch(() => {});
     showToast('Verification code sent to your email address.', 'info');
     setStep(2);
   };
 
-  const handleVerifyOtp = (e) => {
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (otp === '5566') {
+    try {
+      await apiVerifyOtp(guestInfo.email, otp, 'guest');
       setStep(3);
-    } else {
-      showToast('Invalid verification code. Please check your email.', 'warning');
+    } catch (error) {
+      showToast(error.message || 'Invalid verification code.', 'warning');
     }
   };
 
@@ -43,7 +46,15 @@ export const GuestModeView = () => {
       timeSlot: form.timeSlot,
       purpose: form.purpose,
     });
-    sendSimulatedEmail(guestInfo.email, 'Reservation Request Received - NovaLink', `Hi ${guestInfo.fullName}, your facility reservation request has been received and is pending NHAI administrator approval. We will notify you of the status.`);
+    
+    // Send real Brevo confirmation email
+    apiSendNotification(
+      guestInfo.email,
+      guestInfo.fullName,
+      'Reservation Request Received - NovaLink',
+      `Hi ${guestInfo.fullName}, your facility reservation request has been received and is pending NHAI administrator approval. We will notify you of the status.`
+    ).catch(() => {});
+    
     setSubmitted(true);
   };
 

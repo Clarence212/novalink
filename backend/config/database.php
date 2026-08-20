@@ -1,10 +1,6 @@
 <?php
 // hey reader! database connection configuration using PDO
-define('DB_HOST', 'localhost');
-define('DB_PORT', '3306');
-define('DB_NAME', 'novalink_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+require_once __DIR__ . '/env.php';
 
 function getDbConnection() {
     try {
@@ -16,8 +12,7 @@ function getDbConnection() {
         ]);
         return $pdo;
     } catch (PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
-        exit;
+        // Return null instead of exiting, so EmailService can still test the Brevo API locally without MySQL
+        return null;
     }
 }

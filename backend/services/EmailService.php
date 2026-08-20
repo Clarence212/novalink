@@ -8,7 +8,11 @@ class EmailService {
 
     public function __construct() {
         $this->pdo = getDbConnection();
-        $this->config = require __DIR__ . '/../config/mail.php';
+        $this->config = [
+            'from_email' => defined('SYSTEM_EMAIL') ? SYSTEM_EMAIL : 'mail@novalinkhub.tech',
+            'from_name' => 'Novaville Homeowners Association, Inc.',
+            'api_key' => defined('BREVO_API_KEY') ? BREVO_API_KEY : ''
+        ];
     }
 
     /**
@@ -27,7 +31,7 @@ class EmailService {
             <p style='font-size: 12px; color: #94a3b8;'>This code will expire in 15 minutes. If you did not request this, please ignore this email.</p>
         </div>";
 
-        return $this->dispatchEmail($recipientEmail, $subject, $body, 'otp_verification');
+        return $this->dispatchEmail($recipientEmail, $recipientName, $subject, $body, 'otp_verification');
     }
 
     /**
@@ -44,37 +48,70 @@ class EmailService {
             <p style='font-size: 11px; color: #64748b;'>Novaville Homeowners Association, Inc. Portal</p>
         </div>";
 
-        return $this->dispatchEmail($recipientEmail, $subject, $body, 'announcement_broadcast');
+        return $this->dispatchEmail($recipientEmail, 'Resident', $subject, $body, 'announcement_broadcast');
     }
 
     /**
-     * Internal email dispatch & log record creator
+     * Internal email dispatch & log record creator using Brevo API
      */
-    private function dispatchEmail($recipientEmail, $subject, $bodyHtml, $emailType) {
-        // 1. Log notification in database
-        $stmt = $this->pdo->prepare("
-            INSERT INTO email_notifications (notification_id, recipient_email, subject, body_text, email_type, status, sent_at)
-            VALUES (?, ?, ?, ?, ?, 'sent', NOW())
-        ");
-        $notificationId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
-        $stmt->execute([$notificationId, $recipientEmail, $subject, strip_tags($bodyHtml), $emailType]);
+    private function dispatchEmail($recipientEmail, $recipientName, $subject, $bodyHtml, $emailType) {
+        // 1. Log notification in database (Wrapped in try/catch so it doesn't crash if DB isn't setup locally)
+        try {
+            if ($this->pdo) {
+                $stmt = $this->pdo->prepare("
+                INSERT INTO email_notifications (notification_id, recipient_email, subject, body_text, email_type, status, sent_at)
+                VALUES (?, ?, ?, ?, ?, 'sent', NOW())
+            ");
+            $notificationId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            );
+            $stmt->execute([$notificationId, $recipientEmail, $subject, strip_tags($bodyHtml), $emailType]);
+            }
+        } catch (Exception $e) {
+            // Silently ignore DB error so email still sends (helpful for local testing)
+            $notificationId = 'test-id';
+        }
 
-        // 2. Dispatch via PHP mail() with HTML headers
-        $headers = "MIME-Version: 1.0" . "\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: {$this->config['from_name']} <{$this->config['from_email']}>" . "\r\n";
+        // 2. Dispatch via Brevo API
+        $url = 'https://api.brevo.com/v3/smtp/email';
+        
+        $data = [
+            'sender' => [
+                'name' => $this->config['from_name'],
+                'email' => $this->config['from_email']
+            ],
+            'to' => [
+                [
+                    'email' => $recipientEmail,
+                    'name' => $recipientName
+                ]
+            ],
+            'subject' => $subject,
+            'htmlContent' => $bodyHtml
+        ];
 
-        @mail($recipientEmail, $subject, $bodyHtml, $headers);
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'accept: application/json',
+            'api-key: ' . $this->config['api_key'],
+            'content-type: application/json'
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
         return [
-            'success' => true,
+            'success' => ($httpCode >= 200 && $httpCode < 300),
             'notification_id' => $notificationId,
             'to' => $recipientEmail,
-            'subject' => $subject
+            'subject' => $subject,
+            'brevo_response' => json_decode($response, true)
         ];
     }
 }

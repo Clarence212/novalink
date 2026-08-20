@@ -2,9 +2,9 @@
 
 // D1 — User Account Records (Essential System Accounts)
 export const initialUsers = [
-  { id: 'u0', role: 'admin', fullName: 'Clarence Lagamia', email: 'clarence@novaville.org', status: 'active', emailVerified: true },
-  { id: 'u1', role: 'admin', fullName: 'Maria Santos', email: 'admin@novaville.org', status: 'active', emailVerified: true },
-  { id: 'u2', role: 'security', fullName: 'Ramon Dela Cruz', email: 'guard@novaville.org', status: 'active', emailVerified: true },
+  { id: 'u0', role: 'admin', fullName: 'Clarence Lagamia', email: 'clarence@novalinkhub.tech', status: 'active', emailVerified: true },
+  { id: 'u1', role: 'admin', fullName: 'Maria Santos', email: 'admin@novalinkhub.tech', status: 'active', emailVerified: true },
+  { id: 'u2', role: 'security', fullName: 'Ramon Dela Cruz', email: 'guard@novalinkhub.tech', status: 'active', emailVerified: true },
   { id: 'u3', role: 'resident', fullName: 'Clarence Lagamia', email: 'clarence.lagamia@gmail.com', status: 'active', emailVerified: true, homeownerId: 'h1' },
 ];
 

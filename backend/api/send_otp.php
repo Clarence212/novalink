@@ -38,26 +38,31 @@ try {
         mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
     );
 
-    if ($type === 'guest') {
-        $stmt = $pdo->prepare("
-            INSERT INTO guest_email_verifications (guest_verification_id, guest_email, guest_name, otp_code, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
-        $purpose = 'Guest Facility Reservation';
-    } else {
-        // find user if existing
-        $stmt = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
-        $userId = $user ? $user['user_id'] : $id;
+    if ($pdo) {
+        if ($type === 'guest') {
+            $stmt = $pdo->prepare("
+                INSERT INTO guest_email_verifications (guest_verification_id, guest_email, guest_name, otp_code, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
+            $purpose = 'Guest Facility Reservation';
+        } else {
+            // find user if existing
+            $stmt = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+            $userId = $user ? $user['user_id'] : $id;
 
-        $stmt = $pdo->prepare("
-            INSERT INTO account_email_verifications (verification_id, user_id, otp_code, token_hash, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([$id, $userId, $otpCode, password_hash($otpCode, PASSWORD_BCRYPT), $expiresAt]);
-        $purpose = 'Account Registration Verification';
+            $stmt = $pdo->prepare("
+                INSERT INTO account_email_verifications (verification_id, user_id, otp_code, token_hash, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$id, $userId, $otpCode, password_hash($otpCode, PASSWORD_BCRYPT), $expiresAt]);
+            $purpose = 'Account Registration Verification';
+        }
+    } else {
+        // Fallback purposes if no DB (local testing)
+        $purpose = ($type === 'guest') ? 'Guest Facility Reservation' : 'Account Registration Verification';
     }
 
     // dispatch email
