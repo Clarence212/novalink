@@ -17,8 +17,7 @@ export async function apiSendOtp(email, name = 'User', type = 'registration') {
     }
     return await res.json();
   } catch (error) {
-    console.warn('API endpoint unavailable, operating in local mode:', error.message);
-    return { success: true, message: 'OTP code sent to email (local mode).' };
+    throw error;
   }
 }
 
@@ -38,11 +37,25 @@ export async function apiVerifyOtp(email, otp, type = 'registration') {
     }
     return await res.json();
   } catch (error) {
-    console.warn('API endpoint unavailable, operating in local mode:', error.message);
-    // fallback logic: accept valid 4-6 digit code
-    if (otp && otp.length >= 4) {
-      return { success: true, message: 'Email verified successfully.' };
+    throw error;
+  }
+}
+
+/**
+ * Send System Notification Email
+ */
+export async function apiSendNotification(email, name, title, message) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/send_notification.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name, title, message })
+    });
+    if (!res.ok) {
+      throw new Error('Failed to send notification email.');
     }
+    return await res.json();
+  } catch (error) {
     throw error;
   }
 }

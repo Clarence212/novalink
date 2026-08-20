@@ -77,7 +77,6 @@ export const AppProvider = ({ children }) => {
     };
     setEmailLog(prev => [newEmail, ...prev]);
   };
-  const sendSimulatedEmail = sendEmailNotification;
 
   // --- AUTH OPERATIONS ---
   const login = (email, password = '') => {
@@ -288,7 +287,7 @@ export const AppProvider = ({ children }) => {
       visitorLogs, concerns, announcements, stickerRenewals, facilities, emailLog,
       currentUser, currentHomeowner, isGuestMode, setIsGuestMode, toast, isRestricted,
       paymentQRCode,
-      showToast, sendEmailNotification, sendSimulatedEmail,
+      showToast, sendEmailNotification,
       login, logout,
       createUserAccount, approveUser, rejectUser,
       addVisitorLog, updateVisitorExit,
