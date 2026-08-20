@@ -1,6 +1,7 @@
 # NovaLink HOA Management System
 
 **System Title**: NovaLink: Web-Based HOA Management System for Novaville Homeowners Association, Inc.  
+**Beta Testing**: https:novalink.dpdns.org
 **Deployment Target**: Production Web Server (Oracle Linux / Apache / PHP 8.x / MySQL 8.0 / React Vite Frontend)
 
 ---
