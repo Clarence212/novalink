@@ -4,8 +4,8 @@ return [
     'driver' => 'smtp', // 'smtp' or 'mail'
     'smtp_host' => 'smtp.gmail.com',
     'smtp_port' => 587,
-    'smtp_user' => 'notifications@novaville.org',
-    'smtp_pass' => 'your_app_password_here',
-    'from_email' => 'no-reply@novaville.org',
+    'smtp_user' => 'clarence.lagamia@gmail.com',
+    'smtp_pass' => 'grtfdduovvuodspp',
+    'from_email' => 'clarence.lagamia@gmail.com',
     'from_name' => 'Novaville Homeowners Association, Inc.',
 ];
