@@ -1,0 +1,13 @@
+/* hey reader! tailwind v4 css import and custom utilities */
+@import "tailwindcss";
+
+@layer utilities {
+  .bg-gradient-portal {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+  }
+}
