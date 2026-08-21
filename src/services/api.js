@@ -52,3 +52,43 @@ export async function apiSendNotification(email, name, title, message) {
     throw error;
   }
 }
+
+export async function apiFetchUsers() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users.php`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.users || [];
+  } catch (e) {
+    console.warn('Failed to fetch users from server database:', e);
+    return null;
+  }
+}
+
+export async function apiSaveUser(userData) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create', ...userData })
+    });
+    return await res.json();
+  } catch (e) {
+    console.warn('Failed to sync user to database:', e);
+    return null;
+  }
+}
+
+export async function apiUpdateUserStatus(email, action) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, email })
+    });
+    return await res.json();
+  } catch (e) {
+    console.warn('Failed to update user status on server:', e);
+    return null;
+  }
+}

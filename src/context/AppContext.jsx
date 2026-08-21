@@ -5,7 +5,7 @@ import {
   initialAnnouncements, initialStickerRenewals, initialFacilities,
   initialEmailLog, paymentQRCode
 } from '../data/mockData';
-import { apiSendNotification } from '../services/api';
+import { apiSendNotification, apiFetchUsers, apiSaveUser, apiUpdateUserStatus } from '../services/api';
 
 const AppContext = createContext();
 const DB_STORAGE_KEY = 'novalink_clean_production_v4';
@@ -83,6 +83,39 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_stickerRenewals`, JSON.stringify(stickerRenewals)); }, [stickerRenewals]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_emailLog`, JSON.stringify(emailLog)); }, [emailLog]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_currentUser`, JSON.stringify(currentUser)); }, [currentUser]);
+
+  // Sync users with MySQL database on mount & poll every 4 seconds
+  useEffect(() => {
+    const syncUsersFromDb = async () => {
+      const dbUsers = await apiFetchUsers();
+      if (dbUsers && Array.isArray(dbUsers)) {
+        setUsers(prev => {
+          const emailMap = new Map();
+          initialUsers.forEach(u => emailMap.set((u.email || '').toLowerCase(), u));
+          prev.forEach(u => emailMap.set((u.email || '').toLowerCase(), u));
+          dbUsers.forEach(u => {
+            if (!u.email) return;
+            const cleanEmail = u.email.toLowerCase();
+            const existing = emailMap.get(cleanEmail) || {};
+            emailMap.set(cleanEmail, {
+              id: u.id || existing.id || `u_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+              fullName: u.fullName || existing.fullName || 'User',
+              email: cleanEmail,
+              role: u.role || existing.role || 'resident',
+              status: u.status || existing.status || 'pending',
+              emailVerified: u.emailVerified !== undefined ? u.emailVerified : true,
+              passwordHash: existing.passwordHash || simpleHash('novalink2026')
+            });
+          });
+          return Array.from(emailMap.values());
+        });
+      }
+    };
+
+    syncUsersFromDb();
+    const interval = setInterval(syncUsersFromDb, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   
   useEffect(() => {
@@ -190,6 +223,9 @@ export const AppProvider = ({ children }) => {
       targetStatus = userData.role === 'resident' ? 'pending' : 'active';
     }
 
+    // Also persist to MySQL database immediately
+    apiSaveUser({ ...userData, email: cleanEmail, status: targetStatus });
+
     setUsers(prev => {
       const existsIndex = prev.findIndex(u => (u.email || '').trim().toLowerCase() === cleanEmail);
       if (existsIndex >= 0) {
@@ -238,36 +274,45 @@ export const AppProvider = ({ children }) => {
   const approveUser = (userId) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active', manuallyApproved: true } : u));
     const user = users.find(u => u.id === userId);
-    if (user) sendEmailNotification(
-      user.email,
-      'Account Approved - NovaLink Portal',
-      `Hi ${user.fullName}, your NovaLink resident account has been approved by the NHAI Administrator. You may now log in to access all resident features.`,
-      user.fullName
-    );
+    if (user) {
+      apiUpdateUserStatus(user.email, 'approve');
+      sendEmailNotification(
+        user.email,
+        'Account Approved - NovaLink Portal',
+        `Hi ${user.fullName}, your NovaLink resident account has been approved by the NHAI Administrator. You may now log in to access all resident features.`,
+        user.fullName
+      );
+    }
     showToast('Account approved successfully.', 'success');
   };
 
   const rejectUser = (userId) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'rejected' } : u));
     const user = users.find(u => u.id === userId);
-    if (user) sendEmailNotification(
-      user.email,
-      'Account Registration Update - NovaLink Portal',
-      `Hi ${user.fullName}, we regret to inform you that your NovaLink account registration has not been approved at this time. Please contact the NHAI office for further assistance.`,
-      user.fullName
-    );
+    if (user) {
+      apiUpdateUserStatus(user.email, 'reject');
+      sendEmailNotification(
+        user.email,
+        'Account Registration Update - NovaLink Portal',
+        `Hi ${user.fullName}, we regret to inform you that your NovaLink account registration has not been approved at this time. Please contact the NHAI office for further assistance.`,
+        user.fullName
+      );
+    }
     showToast('Account rejected.', 'warning');
   };
 
   const deactivateUser = (userId) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'inactive' } : u));
     const user = users.find(u => u.id === userId);
-    if (user) sendEmailNotification(
-      user.email,
-      'Account Deactivated - NovaLink Portal',
-      `Hi ${user.fullName}, your NovaLink account has been deactivated by the NHAI Administrator. Please contact the office if you believe this is an error.`,
-      user.fullName
-    );
+    if (user) {
+      apiUpdateUserStatus(user.email, 'deactivate');
+      sendEmailNotification(
+        user.email,
+        'Account Deactivated - NovaLink Portal',
+        `Hi ${user.fullName}, your NovaLink account has been deactivated by the NHAI Administrator. Please contact the office if you believe this is an error.`,
+        user.fullName
+      );
+    }
     showToast('Account deactivated.', 'warning');
   };
 
