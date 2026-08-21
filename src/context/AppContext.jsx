@@ -41,6 +41,8 @@ const loadPersistedData = (key, fallback) => {
 
 const seedUsersWithPasswords = (users) => users.map(u => ({
   ...u,
+  // Retroactively fix accounts registered during the hardcoded 'active' bug
+  status: (u.role === 'resident' && u.id !== 'u3' && !u.manuallyApproved) ? 'pending' : u.status,
   passwordHash: u.passwordHash || simpleHash('novalink2026')
 }));
 
@@ -205,7 +207,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const approveUser = (userId) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active' } : u));
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active', manuallyApproved: true } : u));
     const user = users.find(u => u.id === userId);
     if (user) sendEmailNotification(
       user.email,
