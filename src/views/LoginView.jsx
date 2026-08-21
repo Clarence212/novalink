@@ -135,7 +135,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
             <div>
               <h1 class="text-3xl lg:text-4xl font-black tracking-tight text-white">NovaLink Portal</h1>
-              <p class="text-blue-100 font-medium text-base mt-1">BETA Testing</p>
+              <p class="text-blue-100 font-medium text-base mt-1">Early Beta testing</p>
             </div>
           </div>
 
