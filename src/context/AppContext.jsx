@@ -6,11 +6,28 @@ import {
   initialAnnouncements, initialStickerRenewals, initialFacilities,
   initialEmailLog, paymentQRCode
 } from '../data/mockData';
+import { apiSendNotification } from '../services/api';
 
 const AppContext = createContext();
 const DB_STORAGE_KEY = 'novalink_clean_production_v1';
 
-// helper to load persisted DB or fallback to initial records
+// NHAI policy: penalty rate per month unpaid (in PHP)
+const PENALTY_PER_MONTH = 200;
+// auto-restrict after this many consecutive unpaid months
+const RESTRICT_AFTER_MONTHS = 2;
+
+// simple hash — not cryptographic but good enough for client-side state
+// on production MySQL, use proper bcrypt in PHP
+const simpleHash = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `nv_${Math.abs(hash).toString(36)}`;
+};
+
 const loadPersistedData = (key, fallback) => {
   try {
     const saved = localStorage.getItem(`${DB_STORAGE_KEY}_${key}`);
@@ -22,8 +39,14 @@ const loadPersistedData = (key, fallback) => {
   }
 };
 
+// seed users get a default password hash of 'novalink2026' for BETA testing
+const seedUsersWithPasswords = (users) => users.map(u => ({
+  ...u,
+  passwordHash: u.passwordHash || simpleHash('novalink2026')
+}));
+
 export const AppProvider = ({ children }) => {
-  const [users, setUsers] = useState(() => loadPersistedData('users', initialUsers));
+  const [users, setUsers] = useState(() => seedUsersWithPasswords(loadPersistedData('users', initialUsers)));
   const [homeowners, setHomeowners] = useState(() => loadPersistedData('homeowners', initialHomeowners));
   const [vehicles, setVehicles] = useState(() => loadPersistedData('vehicles', initialVehicles));
   const [reservations, setReservations] = useState(() => loadPersistedData('reservations', initialReservations));
@@ -40,7 +63,7 @@ export const AppProvider = ({ children }) => {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Sync state changes to localStorage for production persistence
+  // sync to localStorage
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_users`, JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_homeowners`, JSON.stringify(homeowners)); }, [homeowners]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_vehicles`, JSON.stringify(vehicles)); }, [vehicles]);
@@ -54,12 +77,42 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_emailLog`, JSON.stringify(emailLog)); }, [emailLog]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_currentUser`, JSON.stringify(currentUser)); }, [currentUser]);
 
-  // get the homeowner record linked to current user
+  // auto-update restriction and penalty status based on unpaid dues
+  useEffect(() => {
+    if (dues.length === 0 || homeowners.length === 0) return;
+    setHomeowners(prev => prev.map(h => {
+      const unpaidDues = dues.filter(d => d.homeownerId === h.id && d.status === 'unpaid');
+      const unpaidMonths = unpaidDues.length;
+      const shouldBeRestricted = unpaidMonths >= RESTRICT_AFTER_MONTHS;
+      // only update if something actually changed to avoid infinite loop
+      if (h.unpaidMonths !== unpaidMonths || h.restricted !== shouldBeRestricted) {
+        return { ...h, unpaidMonths, restricted: shouldBeRestricted };
+      }
+      return h;
+    }));
+  // intentionally only run when dues change, not homeowners (avoids loop)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dues]);
+
+  // auto-apply NHAI penalty rate to overdue dues
+  useEffect(() => {
+    setDues(prev => prev.map(d => {
+      if (d.status !== 'unpaid') return d;
+      const due = new Date(d.dueDate);
+      const today = new Date();
+      const monthsOverdue = Math.max(0, Math.floor((today - due) / (1000 * 60 * 60 * 24 * 30)));
+      const penalty = monthsOverdue > 0 ? monthsOverdue * PENALTY_PER_MONTH : 0;
+      if (d.penaltyAmount !== penalty) return { ...d, penaltyAmount: penalty };
+      return d;
+    }));
+  // run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentHomeowner = currentUser?.homeownerId
     ? homeowners.find(h => h.id === currentUser.homeownerId)
     : null;
 
-  // check if current resident is restricted (2+ unpaid months)
   const isRestricted = currentHomeowner?.restricted || false;
 
   const showToast = (message, type = 'info') => {
@@ -67,15 +120,18 @@ export const AppProvider = ({ children }) => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const sendEmailNotification = (to, subject, body) => {
+  // log email to the internal email log AND fire real Brevo email
+  const sendEmailNotification = (to, subject, body, name = 'Resident') => {
     const newEmail = {
       id: `e${Date.now()}`,
-      to,
-      subject,
-      body,
+      to, subject, body,
       sentAt: new Date().toLocaleString('en-PH')
     };
     setEmailLog(prev => [newEmail, ...prev]);
+    // fire live Brevo email in the background, don't block UI on failure
+    apiSendNotification(to, name, subject, body).catch(err =>
+      console.warn('Live email dispatch failed:', err.message)
+    );
   };
 
   // --- AUTH OPERATIONS ---
@@ -84,10 +140,31 @@ export const AppProvider = ({ children }) => {
     const user = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
     if (!user) return { success: false, message: 'Invalid email address or credentials.' };
     if (user.status === 'pending') return { success: false, message: 'Account pending administrator approval.' };
-    if (user.status !== 'active') return { success: false, message: 'Account is inactive. Please contact NHAI office.' };
+    if (user.status === 'rejected') return { success: false, message: 'Account registration was not approved. Please contact NHAI office.' };
+    if (user.status === 'inactive') return { success: false, message: 'Account is inactive. Please contact NHAI office.' };
+
+    // validate password — check against stored hash
+    const inputHash = simpleHash(password);
+    if (user.passwordHash && user.passwordHash !== inputHash) {
+      return { success: false, message: 'Incorrect password. Please try again.' };
+    }
 
     setCurrentUser(user);
     setIsGuestMode(false);
+    return { success: true };
+  };
+
+  // update password for a user by email (used by password reset flow)
+  const updatePassword = (email, newPassword) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const user = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+    if (!user) return { success: false, message: 'No account found with that email.' };
+    const newHash = simpleHash(newPassword);
+    setUsers(prev => prev.map(u =>
+      (u.email || '').trim().toLowerCase() === cleanEmail
+        ? { ...u, passwordHash: newHash }
+        : u
+    ));
     return { success: true };
   };
 
@@ -103,27 +180,72 @@ export const AppProvider = ({ children }) => {
       id: `u${Date.now()}`,
       fullName: userData.fullName,
       email: userData.email,
-      role: userData.role, // 'admin' | 'security' | 'resident'
+      role: userData.role,
       status: 'active',
-      homeownerId: userData.role === 'resident' ? (userData.homeownerId || 'h1') : null
+      passwordHash: simpleHash(userData.password || 'novalink2026'),
+      homeownerId: userData.role === 'resident' ? (userData.homeownerId || null) : null
     };
     setUsers(prev => [newUser, ...prev]);
-    sendEmailNotification(userData.email, `NovaLink ${userData.role.toUpperCase()} Account Created`, `Your new NovaLink ${userData.role} account has been created by the Main Administrator. Email: ${userData.email}`);
+    sendEmailNotification(
+      userData.email,
+      `NovaLink ${userData.role.toUpperCase()} Account Created`,
+      `Your new NovaLink ${userData.role} account has been created by the NHAI Administrator. You can now log in using your registered email. Your default password is: novalink2026 — please change it after your first login.`,
+      userData.fullName
+    );
     showToast(`New ${userData.role} account created successfully.`, 'success');
   };
 
   const approveUser = (userId) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active' } : u));
     const user = users.find(u => u.id === userId);
-    if (user) sendEmailNotification(user.email, 'Account Approved - NovaLink', 'Your NovaLink account has been approved. You may now log in.');
+    if (user) sendEmailNotification(
+      user.email,
+      'Account Approved - NovaLink Portal',
+      `Hi ${user.fullName}, your NovaLink resident account has been approved by the NHAI Administrator. You may now log in to access all resident features.`,
+      user.fullName
+    );
     showToast('Account approved successfully.', 'success');
   };
 
   const rejectUser = (userId) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'rejected' } : u));
     const user = users.find(u => u.id === userId);
-    if (user) sendEmailNotification(user.email, 'Account Registration Update - NovaLink', 'We regret to inform you that your account registration has not been approved at this time.');
+    if (user) sendEmailNotification(
+      user.email,
+      'Account Registration Update - NovaLink Portal',
+      `Hi ${user.fullName}, we regret to inform you that your NovaLink account registration has not been approved at this time. Please contact the NHAI office for further assistance.`,
+      user.fullName
+    );
     showToast('Account rejected.', 'warning');
+  };
+
+  const deactivateUser = (userId) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'inactive' } : u));
+    const user = users.find(u => u.id === userId);
+    if (user) sendEmailNotification(
+      user.email,
+      'Account Deactivated - NovaLink Portal',
+      `Hi ${user.fullName}, your NovaLink account has been deactivated by the NHAI Administrator. Please contact the office if you believe this is an error.`,
+      user.fullName
+    );
+    showToast('Account deactivated.', 'warning');
+  };
+
+  const reactivateUser = (userId) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active' } : u));
+    const user = users.find(u => u.id === userId);
+    if (user) sendEmailNotification(
+      user.email,
+      'Account Reactivated - NovaLink Portal',
+      `Hi ${user.fullName}, your NovaLink account has been reactivated. You may now log in again.`,
+      user.fullName
+    );
+    showToast('Account reactivated.', 'success');
+  };
+
+  const editUser = (userId, updates) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
+    showToast('Account updated successfully.', 'success');
   };
 
   // --- VISITOR LOG OPERATIONS ---
@@ -142,9 +264,15 @@ export const AppProvider = ({ children }) => {
   const addAnnouncement = (data) => {
     const newAnn = { id: `a${Date.now()}`, ...data, postedBy: currentUser?.id, datePosted: new Date().toLocaleDateString('en-PH'), status: 'published' };
     setAnnouncements(prev => [newAnn, ...prev]);
-    const residentEmails = users.filter(u => u.role === 'resident' && u.status === 'active');
-    residentEmails.forEach(u => sendEmailNotification(u.email, `NovaLink Announcement: ${data.title}`, data.content));
-    showToast(`Announcement posted and emailed to ${residentEmails.length} residents.`, 'success');
+    // broadcast to all active residents via real Brevo email
+    const residentUsers = users.filter(u => u.role === 'resident' && u.status === 'active');
+    residentUsers.forEach(u => sendEmailNotification(
+      u.email,
+      `NHAI Announcement: ${data.title}`,
+      `Priority: ${data.priority.toUpperCase()}\n\n${data.content}\n\nThis announcement was posted by Novaville Homeowners Association, Inc. Visit your NovaLink portal for more details.`,
+      u.fullName
+    ));
+    showToast(`Announcement posted and emailed to ${residentUsers.length} residents.`, 'success');
   };
 
   // --- RESERVATION OPERATIONS ---
@@ -157,8 +285,20 @@ export const AppProvider = ({ children }) => {
   const updateReservationStatus = (resId, status) => {
     setReservations(prev => prev.map(r => r.id === resId ? { ...r, status, approvedBy: currentUser?.id } : r));
     const res = reservations.find(r => r.id === resId);
-    if (res && res.requesterEmail) {
-      sendEmailNotification(res.requesterEmail, `Facility Reservation ${status.toUpperCase()} - NovaLink`, `Your facility reservation for ${res.facilityName} on ${res.date} has been ${status}.`);
+    if (res) {
+      // try to find the homeowner email, fallback to requesterEmail if it's a guest
+      const homeowner = homeowners.find(h => h.id === res.homeownerId);
+      const recipientEmail = homeowner?.email || res.requesterEmail;
+      const recipientName = homeowner?.ownerName || res.requesterName || 'Resident';
+      const facility = facilities.find(f => f.id === res.facilityId);
+      if (recipientEmail) {
+        sendEmailNotification(
+          recipientEmail,
+          `Facility Reservation ${status === 'approved' ? 'Approved' : 'Rejected'} - NovaLink`,
+          `Hi ${recipientName}, your facility reservation request for ${facility?.name || 'the facility'} on ${res.date} (${res.timeSlot}) has been ${status} by the NHAI Administrator. ${status === 'rejected' ? 'Please contact the office for more information.' : 'Please proceed to the NHAI office for any additional requirements.'}`,
+          recipientName
+        );
+      }
     }
     showToast(`Reservation ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
@@ -169,11 +309,16 @@ export const AppProvider = ({ children }) => {
       ? { ...p, validationStatus: 'validated', validatedBy: currentUser?.id, validatedAt: new Date().toLocaleString('en-PH'), coveredMonths }
       : p
     ));
-    setDues(prev => prev.map(d => coveredMonths.includes(d.billingMonth) ? { ...d, status: 'paid' } : d));
+    setDues(prev => prev.map(d => coveredMonths.includes(d.billingMonth) ? { ...d, status: 'paid', penaltyAmount: 0 } : d));
     const payment = payments.find(p => p.id === paymentId);
     if (payment) {
       const homeowner = homeowners.find(h => h.id === payment.homeownerId);
-      if (homeowner) sendEmailNotification(homeowner.email, 'Payment Validated - NovaLink', `Your payment of ₱${payment.amountPaid.toLocaleString()} has been validated for: ${coveredMonths.join(', ')}.`);
+      if (homeowner) sendEmailNotification(
+        homeowner.email,
+        'Payment Validated - NovaLink Portal',
+        `Hi ${homeowner.ownerName}, your payment of ₱${payment.amountPaid?.toLocaleString()} has been validated and applied to: ${coveredMonths.join(', ')}. Thank you for settling your dues on time.`,
+        homeowner.ownerName
+      );
     }
     showToast('Payment validated and dues updated.', 'success');
   };
@@ -183,7 +328,12 @@ export const AppProvider = ({ children }) => {
     const payment = payments.find(p => p.id === paymentId);
     if (payment) {
       const homeowner = homeowners.find(h => h.id === payment.homeownerId);
-      if (homeowner) sendEmailNotification(homeowner.email, 'Payment Proof Rejected - NovaLink', 'Your submitted proof of payment could not be validated. Please resubmit with a clear receipt.');
+      if (homeowner) sendEmailNotification(
+        homeowner.email,
+        'Payment Proof Rejected - NovaLink Portal',
+        `Hi ${homeowner.ownerName}, your submitted proof of payment could not be validated. Please resubmit with a clear, legible screenshot of the payment receipt. Contact the NHAI office if you need assistance.`,
+        homeowner.ownerName
+      );
     }
     showToast('Payment proof rejected.', 'warning');
   };
@@ -197,6 +347,30 @@ export const AppProvider = ({ children }) => {
     };
     setPayments(prev => [newPayment, ...prev]);
     showToast('Proof of payment submitted for validation.', 'success');
+  };
+
+  // send dues reminder to a specific homeowner or all with unpaid dues
+  const sendDuesReminder = (homeownerId = null) => {
+    const targets = homeownerId
+      ? homeowners.filter(h => h.id === homeownerId)
+      : homeowners.filter(h => h.unpaidMonths > 0);
+
+    let count = 0;
+    targets.forEach(h => {
+      const unpaid = dues.filter(d => d.homeownerId === h.id && d.status === 'unpaid');
+      if (unpaid.length === 0 && !homeownerId) return;
+      const totalOwed = unpaid.reduce((sum, d) => sum + d.amountDue + d.penaltyAmount, 0);
+      const months = unpaid.map(d => d.billingMonth).join(', ');
+      sendEmailNotification(
+        h.email,
+        'Monthly Dues Reminder - NovaLink Portal',
+        `Hi ${h.ownerName}, this is a reminder that you have ${unpaid.length} unpaid month(s) of HOA dues. Unpaid months: ${months || 'N/A'}. Total balance: ₱${totalOwed.toLocaleString()}. Please settle your dues through the NovaLink portal to avoid additional penalties and service restrictions.`,
+        h.ownerName
+      );
+      count++;
+    });
+
+    showToast(count > 0 ? `Dues reminders sent to ${count} homeowner(s).` : 'No outstanding dues found.', count > 0 ? 'success' : 'info');
   };
 
   // --- CONCERN OPERATIONS ---
@@ -218,7 +392,12 @@ export const AppProvider = ({ children }) => {
     const concern = concerns.find(c => c.id === concernId);
     if (concern) {
       const homeowner = homeowners.find(h => h.id === concern.homeownerId);
-      if (homeowner) sendEmailNotification(homeowner.email, `Concern Update: ${concern.subject}`, `Status: ${status}\n\nResponse: ${response}`);
+      if (homeowner) sendEmailNotification(
+        homeowner.email,
+        `Concern Update: ${concern.subject} - NovaLink Portal`,
+        `Hi ${homeowner.ownerName}, the NHAI Administrator has responded to your concern.\n\nConcern: ${concern.subject}\nStatus: ${status.toUpperCase()}\n\nOfficial Response:\n${response}\n\nYou may view the full response in your NovaLink portal.`,
+        homeowner.ownerName
+      );
     }
     showToast('Response sent and emailed to resident.', 'success');
   };
@@ -238,7 +417,12 @@ export const AppProvider = ({ children }) => {
     const vehicle = vehicles.find(v => v.id === vehicleId);
     if (vehicle) {
       const homeowner = homeowners.find(h => h.id === vehicle.homeownerId);
-      if (homeowner) sendEmailNotification(homeowner.email, `Vehicle Information ${status === 'approved' ? 'Approved' : 'Rejected'} - NovaLink`, `Your vehicle (${vehicle.plateNumber}) has been ${status}.`);
+      if (homeowner) sendEmailNotification(
+        homeowner.email,
+        `Vehicle Information ${status === 'approved' ? 'Approved' : 'Rejected'} - NovaLink Portal`,
+        `Hi ${homeowner.ownerName}, your vehicle (${vehicle.makeModel} - ${vehicle.plateNumber}) has been ${status} by the NHAI Administrator. ${status === 'rejected' ? 'Please resubmit with corrected information or contact the NHAI office.' : 'Your vehicle is now included in your homeowner master record.'}`,
+        homeowner.ownerName
+      );
     }
     showToast(`Vehicle information ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
@@ -264,7 +448,15 @@ export const AppProvider = ({ children }) => {
     const renewal = stickerRenewals.find(r => r.id === renewalId);
     if (renewal) {
       const homeowner = homeowners.find(h => h.id === renewal.homeownerId);
-      if (homeowner) sendEmailNotification(homeowner.email, `HOA Sticker Renewal ${status === 'approved' ? 'Approved' : 'Rejected'} - NovaLink`, status === 'approved' ? `Your sticker renewal has been approved. Sticker No: ${stickerNum}. Please claim at the NHAI office.` : 'Your sticker renewal request has been rejected. Please contact NHAI office.');
+      const vehicle = vehicles.find(v => v.id === renewal.vehicleId);
+      if (homeowner) sendEmailNotification(
+        homeowner.email,
+        `HOA Sticker Renewal ${status === 'approved' ? 'Approved' : 'Rejected'} - NovaLink Portal`,
+        status === 'approved'
+          ? `Hi ${homeowner.ownerName}, your HOA vehicle sticker renewal for ${vehicle?.makeModel || 'your vehicle'} (${vehicle?.plateNumber || ''}) has been approved. Sticker Number: ${stickerNum}. Please claim your sticker at the NHAI office.`
+          : `Hi ${homeowner.ownerName}, your HOA vehicle sticker renewal request has been rejected. Please contact the NHAI office for more information.`,
+        homeowner.ownerName
+      );
     }
     showToast(`Sticker renewal ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
@@ -288,12 +480,12 @@ export const AppProvider = ({ children }) => {
       currentUser, currentHomeowner, isGuestMode, setIsGuestMode, toast, isRestricted,
       paymentQRCode,
       showToast, sendEmailNotification,
-      login, logout,
-      createUserAccount, approveUser, rejectUser,
+      login, logout, updatePassword,
+      createUserAccount, approveUser, rejectUser, deactivateUser, reactivateUser, editUser,
       addVisitorLog, updateVisitorExit,
       addAnnouncement,
       addReservation, updateReservationStatus,
-      validatePayment, rejectPayment, submitPaymentProof,
+      validatePayment, rejectPayment, submitPaymentProof, sendDuesReminder,
       submitConcern, respondToConcern,
       submitVehicle, reviewVehicle,
       submitStickerRenewal, reviewStickerRenewal,
