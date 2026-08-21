@@ -46,8 +46,16 @@ const seedUsersWithPasswords = (users) => users.map(u => ({
   passwordHash: u.passwordHash || simpleHash('novalink2026')
 }));
 
+const loadUsers = () => {
+  const persisted = loadPersistedData('users', initialUsers);
+  const persistedIds = new Set(persisted.map(u => u.id));
+  const missingInitial = initialUsers.filter(u => !persistedIds.has(u.id));
+  const merged = [...persisted, ...missingInitial];
+  return seedUsersWithPasswords(merged);
+};
+
 export const AppProvider = ({ children }) => {
-  const [users, setUsers] = useState(() => seedUsersWithPasswords(loadPersistedData('users', initialUsers)));
+  const [users, setUsers] = useState(loadUsers);
   const [homeowners, setHomeowners] = useState(() => loadPersistedData('homeowners', initialHomeowners));
   const [vehicles, setVehicles] = useState(() => loadPersistedData('vehicles', initialVehicles));
   const [reservations, setReservations] = useState(() => loadPersistedData('reservations', initialReservations));
@@ -177,32 +185,55 @@ export const AppProvider = ({ children }) => {
 
   
   const createUserAccount = (userData) => {
-    const newUser = {
-      id: `u${Date.now()}`,
-      fullName: userData.fullName,
-      email: userData.email,
-      role: userData.role,
-      status: userData.status || 'active',
-      passwordHash: simpleHash(userData.password || 'novalink2026'),
-      homeownerId: userData.role === 'resident' ? (userData.homeownerId || null) : null
-    };
-    setUsers(prev => [newUser, ...prev]);
-    if (newUser.status === 'pending') {
+    const cleanEmail = (userData.email || '').trim().toLowerCase();
+    
+    let targetStatus = userData.status;
+    if (!targetStatus) {
+      targetStatus = userData.role === 'resident' ? 'pending' : 'active';
+    }
+
+    setUsers(prev => {
+      const existsIndex = prev.findIndex(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+      if (existsIndex >= 0) {
+        const updated = [...prev];
+        updated[existsIndex] = {
+          ...updated[existsIndex],
+          fullName: userData.fullName || updated[existsIndex].fullName,
+          status: targetStatus,
+          passwordHash: userData.password ? simpleHash(userData.password) : updated[existsIndex].passwordHash,
+          emailVerified: userData.emailVerified !== undefined ? userData.emailVerified : updated[existsIndex].emailVerified
+        };
+        return updated;
+      }
+
+      const newUser = {
+        id: `u${Date.now()}`,
+        fullName: userData.fullName,
+        email: cleanEmail,
+        role: userData.role || 'resident',
+        status: targetStatus,
+        emailVerified: userData.emailVerified || false,
+        passwordHash: simpleHash(userData.password || 'novalink2026'),
+        homeownerId: userData.role === 'resident' ? (userData.homeownerId || null) : null
+      };
+
+      return [newUser, ...prev];
+    });
+
+    if (targetStatus === 'pending') {
       sendEmailNotification(
         userData.email,
         `NovaLink Resident Account Registration Received`,
         `Hi ${userData.fullName}, your registration for a NovaLink resident account has been received and is pending NHAI Administrator approval. You will receive an email once your account is reviewed.`,
         userData.fullName
       );
-      showToast(`Registration submitted! Pending NHAI Admin approval.`, 'info');
     } else {
       sendEmailNotification(
         userData.email,
-        `NovaLink ${userData.role.toUpperCase()} Account Created`,
-        `Your new NovaLink ${userData.role} account has been created by the NHAI Administrator. You can now log in using your registered email. Your password is: ${userData.password || 'novalink2026'}`,
+        `NovaLink ${userData.role ? userData.role.toUpperCase() : 'USER'} Account Created`,
+        `Your new NovaLink account has been created by the NHAI Administrator. You can now log in using your registered email. Your password is: ${userData.password || 'novalink2026'}`,
         userData.fullName
       );
-      showToast(`New ${userData.role} account created successfully.`, 'success');
     }
   };
 

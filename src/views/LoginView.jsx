@@ -50,9 +50,12 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const handleRegisterOtpSend = async (e) => {
     e.preventDefault();
     try {
+      // Create pending account in system state immediately
+      createUserAccount({ ...regData, role: 'resident', status: 'pending', emailVerified: false });
+
       await apiSendOtp(regData.email, regData.fullName || 'User', 'registration');
       setRegStep(2);
-      showToast('Verification code sent to your email address.', 'info');
+      showToast('Registration submitted! Verification code sent to your email.', 'info');
     } catch (error) {
       showToast(error.message || 'Failed to send OTP.', 'warning');
     }
@@ -63,8 +66,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     try {
       await apiVerifyOtp(regData.email, regOtp, 'registration');
 
-      createUserAccount({ ...regData, role: 'resident', status: 'pending' });
-      showToast('Registration submitted! Your account is pending NHAI Admin approval.', 'success');
+      createUserAccount({ ...regData, role: 'resident', status: 'pending', emailVerified: true });
+      showToast('Email verified successfully! Your account is pending NHAI Admin approval.', 'success');
       setActiveModal(null);
       setRegStep(1);
       setRegData({ fullName: '', email: '', blockLot: '', password: '' });
