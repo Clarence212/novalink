@@ -1,5 +1,5 @@
 <?php
-
+// grabbing db connection here
 require_once __DIR__ . '/env.php';
 
 function getDbConnection() {
