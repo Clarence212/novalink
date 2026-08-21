@@ -3,6 +3,7 @@ export const initialUsers = [
   { id: 'u1', role: 'admin', fullName: 'Maria Santos', email: 'admin@novalinkhub.tech', status: 'active', emailVerified: true },
   { id: 'u2', role: 'security', fullName: 'Ramon Dela Cruz', email: 'guard@novalinkhub.tech', status: 'active', emailVerified: true },
   { id: 'u3', role: 'resident', fullName: 'Clarence Lagamia', email: 'clarence.lagamia@gmail.com', status: 'active', emailVerified: true, homeownerId: 'h1' },
+  { id: 'u4', role: 'resident', fullName: 'Juan Dela Cruz (Sample Pending Registration)', email: 'juan.delacruz@example.com', status: 'pending', emailVerified: true },
 ];
 
 
