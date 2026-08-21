@@ -180,18 +180,28 @@ export const AppProvider = ({ children }) => {
       fullName: userData.fullName,
       email: userData.email,
       role: userData.role,
-      status: 'active',
+      status: userData.status || 'active',
       passwordHash: simpleHash(userData.password || 'novalink2026'),
       homeownerId: userData.role === 'resident' ? (userData.homeownerId || null) : null
     };
     setUsers(prev => [newUser, ...prev]);
-    sendEmailNotification(
-      userData.email,
-      `NovaLink ${userData.role.toUpperCase()} Account Created`,
-      `Your new NovaLink ${userData.role} account has been created by the NHAI Administrator. You can now log in using your registered email. Your default password is: novalink2026 — please change it after your first login.`,
-      userData.fullName
-    );
-    showToast(`New ${userData.role} account created successfully.`, 'success');
+    if (newUser.status === 'pending') {
+      sendEmailNotification(
+        userData.email,
+        `NovaLink Resident Account Registration Received`,
+        `Hi ${userData.fullName}, your registration for a NovaLink resident account has been received and is pending NHAI Administrator approval. You will receive an email once your account is reviewed.`,
+        userData.fullName
+      );
+      showToast(`Registration submitted! Pending NHAI Admin approval.`, 'info');
+    } else {
+      sendEmailNotification(
+        userData.email,
+        `NovaLink ${userData.role.toUpperCase()} Account Created`,
+        `Your new NovaLink ${userData.role} account has been created by the NHAI Administrator. You can now log in using your registered email. Your password is: ${userData.password || 'novalink2026'}`,
+        userData.fullName
+      );
+      showToast(`New ${userData.role} account created successfully.`, 'success');
+    }
   };
 
   const approveUser = (userId) => {
