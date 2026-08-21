@@ -1,42 +1,24 @@
 export const initialUsers = [
   { id: 'u0', role: 'admin', fullName: 'Clarence Lagamia', email: 'clarence@novalinkhub.tech', status: 'active', emailVerified: true },
   { id: 'u1', role: 'admin', fullName: 'Maria Santos', email: 'admin@novalinkhub.tech', status: 'active', emailVerified: true },
-  { id: 'u2', role: 'security', fullName: 'Ramon Dela Cruz', email: 'guard@novalinkhub.tech', status: 'active', emailVerified: true },
-  { id: 'u3', role: 'resident', fullName: 'Clarence Lagamia', email: 'clarence.lagamia@gmail.com', status: 'active', emailVerified: true, homeownerId: 'h1' },
 ];
 
-
-export const initialHomeowners = [
-  {
-    id: 'h1', userId: 'u3', ownerName: 'Clarence Lagamia',
-    blockLot: 'Block 1, Lot 1', street: 'Sunrise St.', contactNumber: '09179998888',
-    email: 'clarence.lagamia@gmail.com', unpaidMonths: 0, restricted: false,
-    occupants: []
-  },
-];
-
+export const initialHomeowners = [];
 
 export const initialVehicles = [];
 
-
 export const initialReservations = [];
-
 
 export const initialDues = [];
 export const initialPayments = [];
 
-
 export const initialVisitorLogs = [];
-
 
 export const initialConcerns = [];
 
-
 export const initialAnnouncements = [];
 
-
 export const initialStickerRenewals = [];
-
 
 export const initialFacilities = [
   { id: 'f1', name: 'Clubhouse Main Hall', description: 'Spacious indoor hall perfect for events, parties, and gatherings.', capacity: 150, rate: '₱2,500 / 4 hours', guestBookable: true, isActive: true },
@@ -45,12 +27,10 @@ export const initialFacilities = [
   { id: 'f4', name: 'Function Room', description: 'Smaller meeting room for seminars, meetings, and small gatherings.', capacity: 30, rate: '₱1,000 / 4 hours', guestBookable: false, isActive: true },
 ];
 
-
 export const paymentQRCode = {
   gcashName: 'Novaville HOA Inc.',
   gcashNumber: '0917-123-4567',
   qrLabel: 'GCash QR Code'
 };
-
 
 export const initialEmailLog = [];

@@ -8,7 +8,7 @@ import {
 import { apiSendNotification } from '../services/api';
 
 const AppContext = createContext();
-const DB_STORAGE_KEY = 'novalink_clean_production_v3';
+const DB_STORAGE_KEY = 'novalink_clean_production_v4';
 
 
 const PENALTY_PER_MONTH = 200;
