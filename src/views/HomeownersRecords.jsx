@@ -1,4 +1,3 @@
-// hey reader! homeowners master records — admin manages all resident records
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Home, ChevronDown, ChevronUp, Search } from 'lucide-react';

@@ -1,4 +1,3 @@
-// hey reader! root React entry mounting the NovaLink App component
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';

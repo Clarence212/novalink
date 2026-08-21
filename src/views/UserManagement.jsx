@@ -1,4 +1,3 @@
-// hey reader! user account management — admin creates, edits, activates, deactivates, and approves accounts
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Users, CheckCircle, XCircle, Search, UserPlus, X, Edit2, UserX, UserCheck } from 'lucide-react';
@@ -77,7 +76,7 @@ export const UserManagement = () => {
         </div>
       )}
 
-      {/* Filters */}
+      {}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex items-center gap-3 flex-1 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700">
           <Search className="w-4 h-4 text-slate-500" />
@@ -102,7 +101,7 @@ export const UserManagement = () => {
         </div>
       </div>
 
-      {/* Users Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden overflow-x-auto">
         <table className="w-full text-xs min-w-[700px]">
           <thead>
@@ -123,7 +122,7 @@ export const UserManagement = () => {
                 <td className="px-5 py-3">{statusBadge(u.status)}</td>
                 <td className="px-5 py-3">
                   <div className="flex gap-1.5 flex-wrap">
-                    {/* pending: approve/reject */}
+                    {}
                     {u.status === 'pending' && (
                       <>
                         <button onClick={() => approveUser(u.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/70 hover:bg-emerald-600 text-white text-[10px] font-bold transition">
@@ -134,7 +133,7 @@ export const UserManagement = () => {
                         </button>
                       </>
                     )}
-                    {/* active: edit + deactivate */}
+                    {}
                     {u.status === 'active' && (
                       <>
                         <button onClick={() => handleEditOpen(u)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600/70 hover:bg-blue-600 text-white text-[10px] font-bold transition">
@@ -145,7 +144,7 @@ export const UserManagement = () => {
                         </button>
                       </>
                     )}
-                    {/* inactive or rejected: reactivate */}
+                    {}
                     {(u.status === 'inactive' || u.status === 'rejected') && (
                       <button onClick={() => reactivateUser(u.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/70 hover:bg-emerald-600 text-white text-[10px] font-bold transition">
                         <UserCheck className="w-3 h-3" /> Reactivate
@@ -162,7 +161,7 @@ export const UserManagement = () => {
         </table>
       </div>
 
-      {/* Modal: Create System Account */}
+      {}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl relative">
@@ -245,7 +244,7 @@ export const UserManagement = () => {
         </div>
       )}
 
-      {/* Modal: Edit User */}
+      {}
       {editingUser && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl relative">

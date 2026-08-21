@@ -1,4 +1,3 @@
-// hey reader! resident concerns module — submit and track concerns, admin can respond
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, X, MessageSquare, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
@@ -50,7 +49,7 @@ export const ResidentConcerns = () => {
         )}
       </div>
 
-      {/* Submit Form */}
+      {}
       {!isAdmin && showForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -83,7 +82,7 @@ export const ResidentConcerns = () => {
         </div>
       )}
 
-      {/* Admin Response Modal */}
+      {}
       {isAdmin && selectedConcern && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl">
@@ -118,7 +117,7 @@ export const ResidentConcerns = () => {
         </div>
       )}
 
-      {/* Concerns List */}
+      {}
       <div className="space-y-4">
         {myConcerns.length === 0 ? (
           <div className="text-center py-16 text-slate-500 text-sm">No concerns submitted yet.</div>

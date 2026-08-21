@@ -1,4 +1,3 @@
-// hey reader! HOA vehicle sticker renewals — residents request, admin processes
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { ClipboardList, CheckCircle, XCircle, Plus } from 'lucide-react';
@@ -28,7 +27,7 @@ export const StickerRenewals = () => {
         <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Review and process HOA vehicle sticker renewal requests' : 'Request sticker renewals for your approved registered vehicles'}</p>
       </div>
 
-      {/* Resident: Eligible vehicles */}
+      {}
       {!isAdmin && (
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Your Eligible Vehicles</h3>
@@ -62,7 +61,7 @@ export const StickerRenewals = () => {
         </div>
       )}
 
-      {/* Renewals Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">{isAdmin ? 'All Renewal Requests' : 'My Renewal Requests'}</h3>

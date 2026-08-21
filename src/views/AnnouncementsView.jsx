@@ -1,4 +1,3 @@
-// hey reader! announcements view — admin can post, all roles can view
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Bell, X, AlertTriangle } from 'lucide-react';
@@ -40,7 +39,7 @@ export const AnnouncementsView = () => {
         )}
       </div>
 
-      {/* Admin Post Form */}
+      {}
       {isAdmin && showForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -94,7 +93,7 @@ export const AnnouncementsView = () => {
         </div>
       )}
 
-      {/* Announcements List */}
+      {}
       <div className="space-y-4">
         {announcements.length === 0 ? (
           <div className="text-center py-16 text-slate-500 text-sm">No announcements posted yet.</div>

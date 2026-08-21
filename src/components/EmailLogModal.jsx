@@ -1,4 +1,3 @@
-// hey reader! system notification and email activity log modal
 import React from 'react';
 import { X, Mail, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -9,7 +8,7 @@ export const EmailLogModal = ({ onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col max-h-[80vh]">
-        {/* Header */}
+        {}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Mail className="w-5 h-5 text-blue-400" />
@@ -21,7 +20,7 @@ export const EmailLogModal = ({ onClose }) => {
           </button>
         </div>
 
-        {/* Email list */}
+        {}
         <div className="overflow-y-auto flex-1 p-4 space-y-3">
           {emailLog.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-sm">No emails dispatched yet.</div>

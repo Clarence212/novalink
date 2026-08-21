@@ -1,4 +1,3 @@
-// hey reader! visitor management admin view — read-only log access for admin role
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Search, LogOut } from 'lucide-react';

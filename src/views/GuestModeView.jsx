@@ -1,4 +1,3 @@
-// hey reader! guest mode — limited access for visitors, facility reservation only after email OTP
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Calendar, Mail, X, CheckCircle } from 'lucide-react';
@@ -7,7 +6,7 @@ import { apiSendOtp, apiVerifyOtp, apiSendNotification } from '../services/api';
 export const GuestModeView = () => {
   const { facilities, reservations, addReservation, sendSimulatedEmail, showToast, setIsGuestMode } = useApp();
 
-  const [step, setStep] = useState(1); // 1=info, 2=otp, 3=booking
+  const [step, setStep] = useState(1); 
   const [guestInfo, setGuestInfo] = useState({ fullName: '', email: '', contactNumber: '' });
   const [otp, setOtp] = useState('');
   const [form, setForm] = useState({ facilityId: 'f1', date: '', timeSlot: '', purpose: '' });
@@ -47,7 +46,7 @@ export const GuestModeView = () => {
       purpose: form.purpose,
     });
     
-    // Send real Brevo confirmation email
+    
     apiSendNotification(
       guestInfo.email,
       guestInfo.fullName,
@@ -61,7 +60,7 @@ export const GuestModeView = () => {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
-        {/* Header */}
+        {}
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center font-extrabold text-white text-2xl shadow-lg mx-auto mb-3">N</div>
           <h1 className="text-xl font-bold text-slate-100">Guest Mode</h1>
@@ -69,7 +68,7 @@ export const GuestModeView = () => {
           <button onClick={() => setIsGuestMode(false)} className="text-xs text-slate-500 hover:text-slate-300 underline mt-1 transition">Back to login</button>
         </div>
 
-        {/* Submitted Confirmation */}
+        {}
         {submitted && (
           <div className="bg-emerald-950/50 border border-emerald-700/50 rounded-3xl p-6 text-center">
             <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
@@ -82,7 +81,7 @@ export const GuestModeView = () => {
           </div>
         )}
 
-        {/* Step 1: Guest Info */}
+        {}
         {!submitted && step === 1 && (
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
             <h2 className="text-sm font-bold text-slate-200 mb-1">Your Contact Information</h2>
@@ -106,7 +105,7 @@ export const GuestModeView = () => {
           </div>
         )}
 
-        {/* Step 2: OTP Verification */}
+        {}
         {!submitted && step === 2 && (
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
             <h2 className="text-sm font-bold text-slate-200 mb-1">Email Verification</h2>
@@ -123,7 +122,7 @@ export const GuestModeView = () => {
           </div>
         )}
 
-        {/* Step 3: Reservation Form */}
+        {}
         {!submitted && step === 3 && (
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
             <h2 className="text-sm font-bold text-slate-200 mb-1">Reserve a Facility</h2>

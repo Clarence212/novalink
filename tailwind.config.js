@@ -1,5 +1,3 @@
-// hey reader! setting up custom colors, gradients and fonts for NovaLink UI
-/** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",

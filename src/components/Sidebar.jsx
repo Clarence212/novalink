@@ -1,4 +1,3 @@
-// hey reader! role-based sidebar navigation — what you see depends on your role
 import React from 'react';
 import {
   LayoutDashboard, Users, FileText, Calendar, Bell, CreditCard,
@@ -7,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-// nav items per role — only show what that role can actually access
+
 const adminNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'homeowners', label: "Homeowners' Records", icon: Home },
@@ -28,7 +27,7 @@ const guardNav = [
   { id: 'announcements', label: 'Announcements', icon: Bell },
 ];
 
-// restricted modules — locked when resident has 2+ unpaid months
+
 const restrictedModules = ['reservations', 'stickers', 'concerns'];
 
 const residentNav = [
@@ -57,7 +56,7 @@ export const Sidebar = ({ activeView, setActiveView }) => {
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-y-auto">
-      {/* Sidebar Header */}
+      {}
       <div className="px-5 py-4 border-b border-slate-800">
         <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
           {isGuestMode ? 'Guest Access' : currentUser?.role === 'admin' ? 'Administrator' : currentUser?.role === 'security' ? 'Security Personnel' : 'Resident Portal'}
@@ -67,7 +66,7 @@ export const Sidebar = ({ activeView, setActiveView }) => {
         </div>
       </div>
 
-      {/* Restriction Banner */}
+      {}
       {isRestricted && currentUser?.role === 'resident' && (
         <div className="mx-3 mt-3 p-2.5 rounded-xl bg-amber-950/60 border border-amber-700/50 text-xs text-amber-300 flex items-start gap-2">
           <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
@@ -75,7 +74,7 @@ export const Sidebar = ({ activeView, setActiveView }) => {
         </div>
       )}
 
-      {/* Nav Items */}
+      {}
       <nav className="flex-1 px-3 py-3 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;

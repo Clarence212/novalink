@@ -1,5 +1,5 @@
 <?php
-// hey reader! email service for sending OTP verification codes and system notifications
+
 require_once __DIR__ . '/../config/database.php';
 
 class EmailService {
@@ -15,9 +15,7 @@ class EmailService {
         ];
     }
 
-    /**
-     * Send OTP Verification email
-     */
+    
     public function sendOtpEmail($recipientEmail, $recipientName, $otpCode, $purpose = 'Account Registration') {
         $subject = "NovaLink OTP Verification Code - {$purpose}";
         $body = "
@@ -34,9 +32,7 @@ class EmailService {
         return $this->dispatchEmail($recipientEmail, $recipientName, $subject, $body, 'otp_verification');
     }
 
-    /**
-     * Broadcast announcement to residents
-     */
+    
     public function sendAnnouncementBroadcast($recipientEmail, $title, $content, $priority) {
         $subject = "NHAI Announcement [{$priority}]: {$title}";
         $body = "
@@ -51,11 +47,9 @@ class EmailService {
         return $this->dispatchEmail($recipientEmail, 'Resident', $subject, $body, 'announcement_broadcast');
     }
 
-    /**
-     * Internal email dispatch & log record creator using Brevo API
-     */
+    
     private function dispatchEmail($recipientEmail, $recipientName, $subject, $bodyHtml, $emailType) {
-        // 1. Log notification in database (Wrapped in try/catch so it doesn't crash if DB isn't setup locally)
+        
         try {
             if ($this->pdo) {
                 $stmt = $this->pdo->prepare("
@@ -70,11 +64,11 @@ class EmailService {
             $stmt->execute([$notificationId, $recipientEmail, $subject, strip_tags($bodyHtml), $emailType]);
             }
         } catch (Exception $e) {
-            // Silently ignore DB error so email still sends (helpful for local testing)
+            
             $notificationId = 'test-id';
         }
 
-        // 2. Dispatch via Brevo API
+        
         $url = 'https://api.brevo.com/v3/smtp/email';
         
         $data = [

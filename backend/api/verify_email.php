@@ -1,5 +1,5 @@
 <?php
-// hey reader! REST API endpoint for verifying submitted email OTP codes
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -16,7 +16,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 
 $email = filter_var($input['email'] ?? '', FILTER_VALIDATE_EMAIL);
 $otpCode = trim($input['otp'] ?? '');
-$type = $input['type'] ?? 'registration'; // 'registration' | 'guest'
+$type = $input['type'] ?? 'registration'; 
 
 if (!$email || !$otpCode) {
     http_response_code(400);
@@ -49,7 +49,7 @@ try {
             exit;
         }
 
-        // mark verified
+        
         $stmt = $pdo->prepare("UPDATE guest_email_verifications SET verified_at = NOW() WHERE guest_verification_id = ?");
         $stmt->execute([$record['guest_verification_id']]);
 
@@ -76,7 +76,7 @@ try {
             exit;
         }
 
-        // mark verified
+        
         $stmt = $pdo->prepare("UPDATE account_email_verifications SET verified_at = NOW() WHERE verification_id = ?");
         $stmt->execute([$record['verification_id']]);
 
