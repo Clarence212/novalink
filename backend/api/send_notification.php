@@ -15,7 +15,7 @@ require_once __DIR__ . '/../services/EmailService.php';
 $input = json_decode(file_get_contents('php://input'), true);
 
 $email = filter_var($input['email'] ?? '', FILTER_VALIDATE_EMAIL);
-$name = trim($input['name'] ?? 'User');
+$name = trim($input['name'] ?? 'Resident');
 $title = trim($input['title'] ?? 'NovaLink Notification');
 $message = trim($input['message'] ?? '');
 
@@ -26,12 +26,11 @@ if (!$email) {
 }
 
 try {
-    
     $pdo = getDbConnection();
     $emailService = new EmailService();
 
-    
-    $res = $emailService->sendAnnouncementBroadcast($email, $title, $message, 'SYSTEM');
+    $res = $emailService->sendAnnouncementBroadcast($email, $name, $title, $message);
+
 
     echo json_encode([
         'success' => true,

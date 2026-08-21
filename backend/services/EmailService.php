@@ -10,16 +10,15 @@ class EmailService {
         $this->pdo = getDbConnection();
         $this->config = [
             'from_email' => defined('SYSTEM_EMAIL') ? SYSTEM_EMAIL : 'mail@novalinkhub.tech',
-            'from_name' => 'Novaville Homeowners Association, Inc.',
-            'api_key' => defined('BREVO_API_KEY') ? BREVO_API_KEY : ''
+            'from_name'  => 'Novaville Homeowners Association, Inc.',
+            'api_key'    => defined('BREVO_API_KEY') ? BREVO_API_KEY : ''
         ];
     }
 
-    
     public function sendOtpEmail($recipientEmail, $recipientName, $otpCode, $purpose = 'Account Registration') {
         $subject = "NovaLink OTP Verification Code - {$purpose}";
         $body = "
-        <div style='font-family: Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 30px; rounded: 16px;'>
+        <div style='font-family: Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 30px;'>
             <h2 style='color: #3b82f6;'>Novaville Homeowners Association, Inc.</h2>
             <p>Hi <strong>{$recipientName}</strong>,</p>
             <p>Your verification code for <strong>{$purpose}</strong> is:</p>
@@ -32,57 +31,54 @@ class EmailService {
         return $this->dispatchEmail($recipientEmail, $recipientName, $subject, $body, 'otp_verification');
     }
 
-    
-    public function sendAnnouncementBroadcast($recipientEmail, $title, $content, $priority) {
-        $subject = "NHAI Announcement [{$priority}]: {$title}";
+    public function sendAnnouncementBroadcast($recipientEmail, $recipientName, $title, $content) {
+        $subject = "NHAI Announcement: {$title}";
         $body = "
         <div style='font-family: Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 30px;'>
             <h2 style='color: #3b82f6;'>Novaville HOA Announcement</h2>
+            <p>Hi <strong>{$recipientName}</strong>,</p>
             <h3 style='color: #e2e8f0;'>{$title}</h3>
             <p style='color: #cbd5e1; line-height: 1.6;'>{$content}</p>
             <hr style='border: 0; border-top: 1px solid #334155; margin: 20px 0;'>
             <p style='font-size: 11px; color: #64748b;'>Novaville Homeowners Association, Inc. Portal</p>
         </div>";
 
-        return $this->dispatchEmail($recipientEmail, 'Resident', $subject, $body, 'announcement_broadcast');
+        return $this->dispatchEmail($recipientEmail, $recipientName, $subject, $body, 'announcement_broadcast');
     }
 
-    
     private function dispatchEmail($recipientEmail, $recipientName, $subject, $bodyHtml, $emailType) {
-        
+        $notificationId = 'fallback-id';
+
         try {
             if ($this->pdo) {
+                $notificationId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                    mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+                );
                 $stmt = $this->pdo->prepare("
-                INSERT INTO email_notifications (notification_id, recipient_email, subject, body_text, email_type, status, sent_at)
-                VALUES (?, ?, ?, ?, ?, 'sent', NOW())
-            ");
-            $notificationId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-            );
-            $stmt->execute([$notificationId, $recipientEmail, $subject, strip_tags($bodyHtml), $emailType]);
+                    INSERT INTO email_notifications (notification_id, recipient_email, subject, body_text, email_type, status, sent_at)
+                    VALUES (?, ?, ?, ?, ?, 'sent', NOW())
+                ");
+                $stmt->execute([$notificationId, $recipientEmail, $subject, strip_tags($bodyHtml), $emailType]);
             }
         } catch (Exception $e) {
-            
-            $notificationId = 'test-id';
+            $notificationId = 'no-db-' . time();
         }
 
-        
         $url = 'https://api.brevo.com/v3/smtp/email';
-        
         $data = [
             'sender' => [
-                'name' => $this->config['from_name'],
+                'name'  => $this->config['from_name'],
                 'email' => $this->config['from_email']
             ],
             'to' => [
                 [
                     'email' => $recipientEmail,
-                    'name' => $recipientName
+                    'name'  => $recipientName
                 ]
             ],
-            'subject' => $subject,
+            'subject'     => $subject,
             'htmlContent' => $bodyHtml
         ];
 
@@ -101,11 +97,11 @@ class EmailService {
         curl_close($ch);
 
         return [
-            'success' => ($httpCode >= 200 && $httpCode < 300),
+            'success'         => ($httpCode >= 200 && $httpCode < 300),
             'notification_id' => $notificationId,
-            'to' => $recipientEmail,
-            'subject' => $subject,
-            'brevo_response' => json_decode($response, true)
+            'to'              => $recipientEmail,
+            'subject'         => $subject,
+            'brevo_response'  => json_decode($response, true)
         ];
     }
 }
