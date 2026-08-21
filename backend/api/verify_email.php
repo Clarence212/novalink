@@ -94,6 +94,24 @@ try {
 
             $stmt = $pdo->prepare("UPDATE guest_email_verifications SET verified_at = NOW() WHERE guest_verification_id = ?");
             $stmt->execute([$guestRecord['guest_verification_id']]);
+
+            // Persist verified registration directly to database
+            $checkUser = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
+            $checkUser->execute([$email]);
+            if (!$checkUser->fetch()) {
+                $userId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                    mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+                );
+                $fullName = !empty($guestRecord['guest_name']) ? $guestRecord['guest_name'] : 'Resident User';
+                $passwordHash = password_hash('novalink2026', PASSWORD_BCRYPT);
+                $ins = $pdo->prepare("
+                    INSERT INTO users (user_id, role_id, full_name, email, password_hash, account_status, email_verified, email_verified_at)
+                    VALUES (?, 3, ?, ?, ?, 'pending', 1, NOW())
+                ");
+                $ins->execute([$userId, $fullName, $email, $passwordHash]);
+            }
         } else {
             if (strtotime($record['expires_at']) < time()) {
                 http_response_code(400);
