@@ -1,6 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -118,5 +116,5 @@ try {
 
 } catch (Throwable $e) {
     http_response_code(500);
-    echo 'RAW ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine();
+    echo json_encode(['error' => 'An unexpected server error occurred: ' . $e->getMessage()]);
 }
