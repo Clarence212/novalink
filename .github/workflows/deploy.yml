@@ -1,0 +1,37 @@
+name: Deploy to Oracle Server
+
+on:
+  push:
+    branches:
+      - main # Triggers the workflow when you push to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Use a modern Node version
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Project (Vite)
+        run: npm run build
+
+      - name: Deploy to Server via SSH
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          ARGS: "-rltgoDzvO" # Rsync arguments
+          SOURCE: "dist/ backend/ index.html" # What to upload
+          REMOTE_HOST: ${{ secrets.ORACLE_HOST }}
+          REMOTE_USER: ${{ secrets.ORACLE_USER }}
+          TARGET: "/var/www/html/novalink/" # Where to put it on Oracle
+          EXCLUDE: "/node_modules/, /.git/, /backend/config/env.php" # Don't overwrite env.php!
