@@ -1,1 +1,9 @@
-<?php ini_set('display_errors', 1); error_reporting(E_ALL); try { \ = new PDO('mysql:host=localhost;dbname=novalink_db;charset=utf8mb4', 'novalink', 'Novalink123!', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]); echo 'SUCCESS'; } catch(Throwable \) { echo 'FATAL: ' . \->getMessage(); }
+<?php
+try {
+    \ = new PDO('mysql:host=localhost;dbname=novalink_db;charset=utf8mb4', 'novalink', 'Novalink123!', [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]);
+    echo "SUCCESS: Connected to DB!";
+} catch (PDOException \) {
+    echo "ERROR: " . \->getMessage();
+}
