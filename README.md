@@ -4,7 +4,7 @@
 
 **Beta Testing**: [novalink.dpdns.org](https://novalink.dpdns.org)
 
-**Documentation Paper**: [novalink.dpdns.org](https://novalinkhub.tech)
+**Documentation Paper**: [novalinkhub.tech](https://novalinkhub.tech)
 
 **Deployment Target**: Production Web Server (Oracle Linux / Apache / PHP 8.x / MySQL 8.0 / React Vite Frontend)
 
