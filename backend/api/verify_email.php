@@ -27,6 +27,12 @@ if (!$email || !$otpCode) {
 try {
     $pdo = getDbConnection();
 
+    if (!$pdo) {
+        http_response_code(503);
+        echo json_encode(['error' => 'Database connection unavailable. Please try again later.']);
+        exit;
+    }
+
     if ($type === 'guest') {
         $stmt = $pdo->prepare("
             SELECT guest_verification_id, expires_at, verified_at
