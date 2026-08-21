@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { apiSendOtp, apiVerifyOtp } from '../services/api';
 
 export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
-  const { login, setIsGuestMode, showToast } = useApp();
+  const { login, setIsGuestMode, showToast, createUserAccount, updatePassword } = useApp();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,11 +28,12 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   // forgot password state
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStep, setForgotStep] = useState(1);
+  const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
   const handleSignIn = (e) => {
     e.preventDefault();
-    const result = login(email);
+    const result = login(email, password);
     if (!result.success) {
       showToast(result.message, 'warning');
       return;
@@ -62,9 +63,13 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     e.preventDefault();
     try {
       await apiVerifyOtp(regData.email, regOtp, 'registration');
-      showToast('Registration submitted! Account pending NHAI Admin approval.', 'success');
+      // submit registration to system with pending status (admin needs to approve)
+      createUserAccount({ ...regData, role: 'resident', status: 'pending' });
+      showToast('Registration submitted! Your account is pending NHAI Admin approval.', 'success');
       setActiveModal(null);
       setRegStep(1);
+      setRegData({ fullName: '', email: '', blockLot: '', password: '' });
+      setRegOtp('');
     } catch (error) {
       showToast(error.message || 'Invalid verification code entered.', 'warning');
     }
@@ -81,21 +86,33 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     }
   };
 
-  const handleResetPassword = async (e) => {
+  const handleResetVerifyOtp = async (e) => {
     e.preventDefault();
     try {
-      // Assuming regOtp state is not used here but the new modal input is. 
-      // Wait, there's no resetOtp state? Let's assume we reuse regOtp or we just pass a string for now, but I need to make sure the state is correct.
-      // Wait, I didn't see where the forgot password otp was stored! Let's check state.
-      // Line 28: const [forgotStep, setForgotStep] = useState(1);
-      // Wait, we need an OTP for the reset. We'll use a local variable or regOtp if they share the input, but actually the user just wanted fake stuff removed.
-      await apiVerifyOtp(forgotEmail, newPassword /* wait, where is otp stored? I'll use regOtp for now */, 'reset');
-      showToast('Password reset successfully! Please sign in with your new password.', 'success');
-      setActiveModal(null);
-      setForgotStep(1);
+      await apiVerifyOtp(forgotEmail, forgotOtp, 'reset');
+      setForgotStep(3);
     } catch (error) {
       showToast(error.message || 'Invalid verification code.', 'warning');
     }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      showToast('Password must be at least 8 characters.', 'warning');
+      return;
+    }
+    const result = updatePassword(forgotEmail, newPassword);
+    if (!result.success) {
+      showToast(result.message, 'warning');
+      return;
+    }
+    showToast('Password reset successfully! Please sign in with your new password.', 'success');
+    setActiveModal(null);
+    setForgotStep(1);
+    setForgotEmail('');
+    setForgotOtp('');
+    setNewPassword('');
   };
 
   return (
@@ -374,13 +391,15 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
             <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <h3 class="text-lg font-bold text-slate-900">Reset Account Password</h3>
-              <button onClick={() => setActiveModal(null)} class="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setActiveModal(null); setForgotStep(1); setForgotEmail(''); setForgotOtp(''); setNewPassword(''); }} class="text-slate-400 hover:text-slate-600">
                 <X class="w-5 h-5" />
               </button>
             </div>
 
-            {forgotStep === 1 ? (
+            {/* step 1: enter email */}
+            {forgotStep === 1 && (
               <form onSubmit={handleForgotSend} class="space-y-3 text-xs">
+                <p class="text-slate-500">Enter your registered email address and we will send you a verification code.</p>
                 <div>
                   <label class="block font-medium text-slate-700 mb-1">Registered Account Email</label>
                   <input
@@ -396,20 +415,50 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                   type="submit"
                   class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
-                  Send Reset Link / OTP
+                  Send Reset Code
                 </button>
               </form>
-            ) : (
+            )}
+
+            {/* step 2: verify OTP */}
+            {forgotStep === 2 && (
+              <form onSubmit={handleResetVerifyOtp} class="space-y-3 text-xs">
+                <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
+                  <Mail class="w-4 h-4 shrink-0 text-blue-600" />
+                  <span>Verification code sent to <strong>{forgotEmail}</strong>. Check your inbox.</span>
+                </div>
+                <div>
+                  <label class="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter the code from your email"
+                    value={forgotOtp}
+                    onChange={(e) => setForgotOtp(e.target.value)}
+                    class="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
+                >
+                  Verify Code
+                </button>
+              </form>
+            )}
+
+            {/* step 3: enter new password */}
+            {forgotStep === 3 && (
               <form onSubmit={handleResetPassword} class="space-y-3 text-xs">
-                <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs">
-                  Password reset code sent to <strong>{forgotEmail}</strong>. (Code: 3344)
+                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                  Identity verified. Enter your new password below.
                 </div>
                 <div>
                   <label class="block font-medium text-slate-700 mb-1">New Password</label>
                   <input
                     type="password"
                     required
-                    placeholder="Enter new password"
+                    placeholder="At least 8 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     class="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-600"

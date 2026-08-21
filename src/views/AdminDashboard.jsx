@@ -92,6 +92,14 @@ export const AdminDashboard = ({ setActiveView }) => {
       bg: 'bg-slate-100 text-slate-700',
       badge: null
     },
+    {
+      id: 'dues-charts',
+      title: 'Dues & Collection Summary',
+      desc: 'View charts on paid accounts, overdue balances, and monthly collection totals',
+      icon: TrendingUp,
+      bg: 'bg-teal-100 text-teal-600',
+      badge: null
+    },
   ];
 
   return (

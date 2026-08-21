@@ -17,6 +17,7 @@ import { VisitorManagement } from './views/VisitorManagement';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { FacilityReservations } from './views/FacilityReservations';
 import { DuesManagement } from './views/DuesManagement';
+import { DuesSummaryCharts } from './views/DuesSummaryCharts';
 import { ResidentConcerns } from './views/ResidentConcerns';
 import { VehicleManagement } from './views/VehicleManagement';
 import { StickerRenewals } from './views/StickerRenewals';
@@ -68,6 +69,7 @@ const AppContent = () => {
       'announcements': <AnnouncementsView />,
       'reservations': <FacilityReservations />,
       'dues': <DuesManagement />,
+      'dues-charts': <DuesSummaryCharts />,
       'concerns': <ResidentConcerns />,
       'vehicles': <VehicleManagement />,
       'stickers': <StickerRenewals />,

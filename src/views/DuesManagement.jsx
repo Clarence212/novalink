@@ -9,7 +9,7 @@ const statusBadge = (s) => {
 };
 
 export const DuesManagement = () => {
-  const { currentUser, currentHomeowner, dues, payments, homeowners, validatePayment, rejectPayment, submitPaymentProof, paymentQRCode, showToast } = useApp();
+  const { currentUser, currentHomeowner, dues, payments, homeowners, validatePayment, rejectPayment, submitPaymentProof, paymentQRCode, showToast, sendDuesReminder } = useApp();
   const isAdmin = currentUser?.role === 'admin';
 
   const [showPayForm, setShowPayForm] = useState(false);
@@ -47,6 +47,16 @@ export const DuesManagement = () => {
           <h2 className="text-xl font-bold text-slate-100">{isAdmin ? 'Dues Management' : 'Dues & Payments'}</h2>
           <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Validate submitted proofs of payment and monitor dues records' : 'View your dues status and submit payment proof'}</p>
         </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => sendDuesReminder()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition"
+            >
+              Send Reminders to All Overdue
+            </button>
+          </div>
+        )}
         {!isAdmin && (
           <button
             onClick={() => setShowPayForm(!showPayForm)}
