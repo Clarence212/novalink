@@ -50,12 +50,9 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const handleRegisterOtpSend = async (e) => {
     e.preventDefault();
     try {
-      // Create pending account in system state immediately
-      createUserAccount({ ...regData, role: 'resident', status: 'pending', emailVerified: false });
-
       await apiSendOtp(regData.email, regData.fullName || 'User', 'registration');
       setRegStep(2);
-      showToast('Registration submitted! Verification code sent to your email.', 'info');
+      showToast('Verification code sent to your email address.', 'info');
     } catch (error) {
       showToast(error.message || 'Failed to send OTP.', 'warning');
     }
