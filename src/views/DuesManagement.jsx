@@ -1,4 +1,3 @@
-// hey reader! dues and payment module for residents and admins
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CreditCard, Upload, CheckCircle, X, AlertTriangle, QrCode } from 'lucide-react';
@@ -32,7 +31,7 @@ export const DuesManagement = () => {
   const handleValidate = (paymentId) => {
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) return;
-    // auto-match months based on amount (simplified)
+    
     const unpaid = dues.filter(d => d.homeownerId === payment.homeownerId && d.status === 'unpaid');
     const monthsCount = Math.floor(payment.amountPaid / 1500);
     const coveredMonths = unpaid.slice(0, monthsCount).map(d => d.billingMonth);
@@ -67,7 +66,7 @@ export const DuesManagement = () => {
         )}
       </div>
 
-      {/* Resident: Balance + QR Code */}
+      {}
       {!isAdmin && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className={`p-5 rounded-2xl border ${totalBalance > 0 ? 'bg-red-950/30 border-red-800/50' : 'bg-emerald-950/30 border-emerald-800/50'}`}>
@@ -86,7 +85,7 @@ export const DuesManagement = () => {
         </div>
       )}
 
-      {/* Resident: Submit Proof */}
+      {}
       {!isAdmin && showPayForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -125,7 +124,7 @@ export const DuesManagement = () => {
         </div>
       )}
 
-      {/* Admin: Pending Validations */}
+      {}
       {isAdmin && pendingPayments.length > 0 && (
         <div className="bg-amber-950/30 border border-amber-700/50 rounded-2xl p-5">
           <h3 className="text-sm font-bold text-amber-300 mb-3 flex items-center gap-2">
@@ -156,7 +155,7 @@ export const DuesManagement = () => {
         </div>
       )}
 
-      {/* Dues Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">Billing Records</h3>
@@ -191,7 +190,7 @@ export const DuesManagement = () => {
         </table>
       </div>
 
-      {/* Payment History */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">Payment Submission History</h3>

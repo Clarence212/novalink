@@ -1,4 +1,3 @@
-// hey reader! vehicle information management — submit vehicles, admin reviews them
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, X, Car, CheckCircle, XCircle } from 'lucide-react';
@@ -42,7 +41,7 @@ export const VehicleManagement = () => {
         )}
       </div>
 
-      {/* Submit Form */}
+      {}
       {!isAdmin && showForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -80,7 +79,7 @@ export const VehicleManagement = () => {
         </div>
       )}
 
-      {/* Vehicles Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">Vehicle Records</h3>

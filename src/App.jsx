@@ -1,4 +1,3 @@
-// hey reader! main App routing coordinator — handles auth state and view switching
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { LoginView } from './views/LoginView';
@@ -7,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { EmailLogModal } from './components/EmailLogModal';
 
-// view imports
+
 import { AdminDashboard } from './views/AdminDashboard';
 import { ResidentDashboard } from './views/ResidentDashboard';
 import { GuardDashboard } from './views/GuardDashboard';
@@ -28,7 +27,7 @@ const AppContent = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const [showEmailLog, setShowEmailLog] = useState(false);
 
-  // not logged in → initial page is directly login page
+  
   if (!currentUser && !isGuestMode) {
     return (
       <>
@@ -41,7 +40,7 @@ const AppContent = () => {
     );
   }
 
-  // determine default view based on role
+  
   const handleSetView = (view) => setActiveView(view);
 
   const handleSignOut = () => {
@@ -49,13 +48,13 @@ const AppContent = () => {
     setActiveView('dashboard');
   };
 
-  // render the right view component
+  
   const renderView = () => {
     if (isGuestMode) return <GuestModeView />;
 
     const role = currentUser?.role;
 
-    // role-specific dashboard
+    
     if (activeView === 'dashboard') {
       if (role === 'admin') return <AdminDashboard setActiveView={handleSetView} />;
       if (role === 'security') return <GuardDashboard />;
@@ -73,7 +72,7 @@ const AppContent = () => {
       'concerns': <ResidentConcerns />,
       'vehicles': <VehicleManagement />,
       'stickers': <StickerRenewals />,
-      'email-log': null, // handled via modal
+      'email-log': null, 
     };
 
     return viewMap[activeView] || (role === 'admin' ? <AdminDashboard setActiveView={handleSetView} /> : <ResidentDashboard setActiveView={handleSetView} />);

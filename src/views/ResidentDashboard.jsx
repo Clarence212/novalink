@@ -1,4 +1,3 @@
-// hey reader! resident dashboard featuring the modern card grid UI design concept
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import {
@@ -17,7 +16,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
   const myConcerns = concerns.filter(c => c.homeownerId === currentHomeowner?.id);
   const myStickers = stickerRenewals.filter(s => s.homeownerId === currentHomeowner?.id);
 
-  // Exact 6 Modules matching screenshot concept
+  
   const residentModules = [
     {
       id: 'announcements',
@@ -77,7 +76,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
-      {/* Welcome Greeting Header matching screenshot concept */}
+      {}
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
           Good morning, {displayName}! 👋
@@ -85,7 +84,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
         <p className="text-sm text-slate-400 mt-1">Welcome to your community dashboard</p>
       </div>
 
-      {/* Dues Alert Banner if unpaid */}
+      {}
       {unpaidDues.length > 0 && (
         <div className="p-4 rounded-2xl bg-red-950/40 border border-red-800/50 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -106,7 +105,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
         </div>
       )}
 
-      {/* Main 6 Cards Grid (2 rows x 3 cols layout from UI Concept) */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {residentModules.map((m) => {
           const Icon = m.icon;

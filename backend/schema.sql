@@ -1,10 +1,6 @@
--- hey reader! database schema for NovaLink HOA Management System (Novaville Homeowners Association, Inc.)
--- matches all 7 ERD modules and 10 Data Stores (D1-D10)
-
 CREATE DATABASE IF NOT EXISTS novalink_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE novalink_db;
 
--- 1. ACCOUNTS & ROLES (D1)
 CREATE TABLE IF NOT EXISTS roles (
   role_id INT AUTO_INCREMENT PRIMARY KEY,
   role_name VARCHAR(50) NOT NULL UNIQUE
@@ -47,7 +43,6 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- 2. HOMEOWNER MASTER RECORDS (D2)
 CREATE TABLE IF NOT EXISTS homeowners (
   homeowner_id VARCHAR(36) PRIMARY KEY,
   user_id VARCHAR(36) NULL UNIQUE,
@@ -71,7 +66,6 @@ CREATE TABLE IF NOT EXISTS household_occupants (
   FOREIGN KEY (homeowner_id) REFERENCES homeowners(homeowner_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- 3. VEHICLE RECORDS & STICKERS (D3, D9)
 CREATE TABLE IF NOT EXISTS vehicles (
   vehicle_id VARCHAR(36) PRIMARY KEY,
   homeowner_id VARCHAR(36) NOT NULL,
@@ -105,7 +99,6 @@ CREATE TABLE IF NOT EXISTS vehicle_sticker_renewals (
   FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- 4. FACILITIES & GUEST RESERVATIONS (D4, D10)
 CREATE TABLE IF NOT EXISTS facilities (
   facility_id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -144,7 +137,6 @@ CREATE TABLE IF NOT EXISTS facility_reservations (
   FOREIGN KEY (approved_by) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- 5. DUES & PAYMENTS (D5)
 CREATE TABLE IF NOT EXISTS dues (
   dues_id VARCHAR(36) PRIMARY KEY,
   homeowner_id VARCHAR(36) NOT NULL,
@@ -172,7 +164,6 @@ CREATE TABLE IF NOT EXISTS payments (
   FOREIGN KEY (validated_by) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- 6. VISITORS (D6)
 CREATE TABLE IF NOT EXISTS visitor_logs (
   visitor_log_id VARCHAR(36) PRIMARY KEY,
   visitor_name VARCHAR(100) NOT NULL,
@@ -186,7 +177,6 @@ CREATE TABLE IF NOT EXISTS visitor_logs (
   FOREIGN KEY (recorded_by) REFERENCES users(user_id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- 7. CONCERNS & ANNOUNCEMENTS (D7, D8)
 CREATE TABLE IF NOT EXISTS concerns (
   concern_id VARCHAR(36) PRIMARY KEY,
   homeowner_id VARCHAR(36) NOT NULL,
@@ -216,7 +206,6 @@ CREATE TABLE IF NOT EXISTS announcements (
   FOREIGN KEY (posted_by) REFERENCES users(user_id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- EMAIL NOTIFICATIONS & LOGS
 CREATE TABLE IF NOT EXISTS email_notifications (
   notification_id VARCHAR(36) PRIMARY KEY,
   recipient_email VARCHAR(150) NOT NULL,

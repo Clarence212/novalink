@@ -1,4 +1,3 @@
-// hey reader! production app context with localStorage DB persistence and real auth handling
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   initialUsers, initialHomeowners, initialVehicles, initialReservations,
@@ -11,13 +10,13 @@ import { apiSendNotification } from '../services/api';
 const AppContext = createContext();
 const DB_STORAGE_KEY = 'novalink_clean_production_v1';
 
-// NHAI policy: penalty rate per month unpaid (in PHP)
+
 const PENALTY_PER_MONTH = 200;
-// auto-restrict after this many consecutive unpaid months
+
 const RESTRICT_AFTER_MONTHS = 2;
 
-// simple hash — not cryptographic but good enough for client-side state
-// on production MySQL, use proper bcrypt in PHP
+
+
 const simpleHash = (str) => {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -39,7 +38,7 @@ const loadPersistedData = (key, fallback) => {
   }
 };
 
-// seed users get a default password hash of 'novalink2026' for BETA testing
+
 const seedUsersWithPasswords = (users) => users.map(u => ({
   ...u,
   passwordHash: u.passwordHash || simpleHash('novalink2026')
@@ -63,7 +62,7 @@ export const AppProvider = ({ children }) => {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // sync to localStorage
+  
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_users`, JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_homeowners`, JSON.stringify(homeowners)); }, [homeowners]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_vehicles`, JSON.stringify(vehicles)); }, [vehicles]);
@@ -77,24 +76,24 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_emailLog`, JSON.stringify(emailLog)); }, [emailLog]);
   useEffect(() => { localStorage.setItem(`${DB_STORAGE_KEY}_currentUser`, JSON.stringify(currentUser)); }, [currentUser]);
 
-  // auto-update restriction and penalty status based on unpaid dues
+  
   useEffect(() => {
     if (dues.length === 0 || homeowners.length === 0) return;
     setHomeowners(prev => prev.map(h => {
       const unpaidDues = dues.filter(d => d.homeownerId === h.id && d.status === 'unpaid');
       const unpaidMonths = unpaidDues.length;
       const shouldBeRestricted = unpaidMonths >= RESTRICT_AFTER_MONTHS;
-      // only update if something actually changed to avoid infinite loop
+      
       if (h.unpaidMonths !== unpaidMonths || h.restricted !== shouldBeRestricted) {
         return { ...h, unpaidMonths, restricted: shouldBeRestricted };
       }
       return h;
     }));
-  // intentionally only run when dues change, not homeowners (avoids loop)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  
+  
   }, [dues]);
 
-  // auto-apply NHAI penalty rate to overdue dues
+  
   useEffect(() => {
     setDues(prev => prev.map(d => {
       if (d.status !== 'unpaid') return d;
@@ -105,8 +104,8 @@ export const AppProvider = ({ children }) => {
       if (d.penaltyAmount !== penalty) return { ...d, penaltyAmount: penalty };
       return d;
     }));
-  // run once on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  
+  
   }, []);
 
   const currentHomeowner = currentUser?.homeownerId
@@ -120,7 +119,7 @@ export const AppProvider = ({ children }) => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // log email to the internal email log AND fire real Brevo email
+  
   const sendEmailNotification = (to, subject, body, name = 'Resident') => {
     const newEmail = {
       id: `e${Date.now()}`,
@@ -128,13 +127,13 @@ export const AppProvider = ({ children }) => {
       sentAt: new Date().toLocaleString('en-PH')
     };
     setEmailLog(prev => [newEmail, ...prev]);
-    // fire live Brevo email in the background, don't block UI on failure
+    
     apiSendNotification(to, name, subject, body).catch(err =>
       console.warn('Live email dispatch failed:', err.message)
     );
   };
 
-  // --- AUTH OPERATIONS ---
+  
   const login = (email, password = '') => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const user = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
@@ -143,7 +142,7 @@ export const AppProvider = ({ children }) => {
     if (user.status === 'rejected') return { success: false, message: 'Account registration was not approved. Please contact NHAI office.' };
     if (user.status === 'inactive') return { success: false, message: 'Account is inactive. Please contact NHAI office.' };
 
-    // validate password — check against stored hash
+    
     const inputHash = simpleHash(password);
     if (user.passwordHash && user.passwordHash !== inputHash) {
       return { success: false, message: 'Incorrect password. Please try again.' };
@@ -154,7 +153,7 @@ export const AppProvider = ({ children }) => {
     return { success: true };
   };
 
-  // update password for a user by email (used by password reset flow)
+  
   const updatePassword = (email, newPassword) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const user = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
@@ -174,7 +173,7 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem(`${DB_STORAGE_KEY}_currentUser`);
   };
 
-  // --- USER MANAGEMENT ---
+  
   const createUserAccount = (userData) => {
     const newUser = {
       id: `u${Date.now()}`,
@@ -248,7 +247,7 @@ export const AppProvider = ({ children }) => {
     showToast('Account updated successfully.', 'success');
   };
 
-  // --- VISITOR LOG OPERATIONS ---
+  
   const addVisitorLog = (logData) => {
     const newLog = { id: `vl${Date.now()}`, ...logData, recordedBy: currentUser?.id, entryTime: new Date().toLocaleString('en-PH'), exitTime: null };
     setVisitorLogs(prev => [newLog, ...prev]);
@@ -260,11 +259,11 @@ export const AppProvider = ({ children }) => {
     showToast('Visitor exit recorded.', 'success');
   };
 
-  // --- ANNOUNCEMENT OPERATIONS ---
+  
   const addAnnouncement = (data) => {
     const newAnn = { id: `a${Date.now()}`, ...data, postedBy: currentUser?.id, datePosted: new Date().toLocaleDateString('en-PH'), status: 'published' };
     setAnnouncements(prev => [newAnn, ...prev]);
-    // broadcast to all active residents via real Brevo email
+    
     const residentUsers = users.filter(u => u.role === 'resident' && u.status === 'active');
     residentUsers.forEach(u => sendEmailNotification(
       u.email,
@@ -275,7 +274,7 @@ export const AppProvider = ({ children }) => {
     showToast(`Announcement posted and emailed to ${residentUsers.length} residents.`, 'success');
   };
 
-  // --- RESERVATION OPERATIONS ---
+  
   const addReservation = (data) => {
     const newRes = { id: `r${Date.now()}`, ...data, status: 'pending', approvedBy: null, createdAt: new Date().toLocaleDateString('en-PH') };
     setReservations(prev => [newRes, ...prev]);
@@ -286,7 +285,7 @@ export const AppProvider = ({ children }) => {
     setReservations(prev => prev.map(r => r.id === resId ? { ...r, status, approvedBy: currentUser?.id } : r));
     const res = reservations.find(r => r.id === resId);
     if (res) {
-      // try to find the homeowner email, fallback to requesterEmail if it's a guest
+      
       const homeowner = homeowners.find(h => h.id === res.homeownerId);
       const recipientEmail = homeowner?.email || res.requesterEmail;
       const recipientName = homeowner?.ownerName || res.requesterName || 'Resident';
@@ -303,7 +302,7 @@ export const AppProvider = ({ children }) => {
     showToast(`Reservation ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
 
-  // --- DUES OPERATIONS ---
+  
   const validatePayment = (paymentId, coveredMonths) => {
     setPayments(prev => prev.map(p => p.id === paymentId
       ? { ...p, validationStatus: 'validated', validatedBy: currentUser?.id, validatedAt: new Date().toLocaleString('en-PH'), coveredMonths }
@@ -349,7 +348,7 @@ export const AppProvider = ({ children }) => {
     showToast('Proof of payment submitted for validation.', 'success');
   };
 
-  // send dues reminder to a specific homeowner or all with unpaid dues
+  
   const sendDuesReminder = (homeownerId = null) => {
     const targets = homeownerId
       ? homeowners.filter(h => h.id === homeownerId)
@@ -373,7 +372,7 @@ export const AppProvider = ({ children }) => {
     showToast(count > 0 ? `Dues reminders sent to ${count} homeowner(s).` : 'No outstanding dues found.', count > 0 ? 'success' : 'info');
   };
 
-  // --- CONCERN OPERATIONS ---
+  
   const submitConcern = (data) => {
     const newConcern = {
       id: `c${Date.now()}`, homeownerId: currentHomeowner?.id, submittedBy: currentUser?.id,
@@ -402,7 +401,7 @@ export const AppProvider = ({ children }) => {
     showToast('Response sent and emailed to resident.', 'success');
   };
 
-  // --- VEHICLE OPERATIONS ---
+  
   const submitVehicle = (data) => {
     const newVehicle = {
       id: `v${Date.now()}`, homeownerId: currentHomeowner?.id, submittedBy: currentUser?.id,
@@ -427,7 +426,7 @@ export const AppProvider = ({ children }) => {
     showToast(`Vehicle information ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
 
-  // --- STICKER RENEWAL OPERATIONS ---
+  
   const submitStickerRenewal = (vehicleId) => {
     const newRenewal = {
       id: `sr${Date.now()}`, vehicleId, homeownerId: currentHomeowner?.id,
@@ -461,7 +460,7 @@ export const AppProvider = ({ children }) => {
     showToast(`Sticker renewal ${status}.`, status === 'approved' ? 'success' : 'warning');
   };
 
-  // --- HOMEOWNER RECORD OPERATIONS ---
+  
   const addHomeownerRecord = (data) => {
     const newRecord = { id: `h${Date.now()}`, ...data, unpaidMonths: 0, restricted: false, occupants: [] };
     setHomeowners(prev => [...prev, newRecord]);

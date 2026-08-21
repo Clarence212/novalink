@@ -1,9 +1,8 @@
-// hey reader! dues summary charts for the admin — backlog #23
 import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { TrendingUp, Users, AlertTriangle, CheckCircle, DollarSign } from 'lucide-react';
 
-// simple css-based progress bar chart — no external library needed
+
 const ProgressBar = ({ value, max, color = 'bg-blue-500', label, sublabel }) => {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
@@ -20,7 +19,7 @@ const ProgressBar = ({ value, max, color = 'bg-blue-500', label, sublabel }) => 
   );
 };
 
-// donut chart using SVG — pure CSS/SVG, no chart library
+
 const DonutChart = ({ segments, size = 120, thickness = 24 }) => {
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -52,7 +51,7 @@ const DonutChart = ({ segments, size = 120, thickness = 24 }) => {
 
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      {/* background circle */}
+      {}
       <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1e293b" strokeWidth={thickness} />
       {paths}
     </svg>
@@ -84,7 +83,7 @@ export const DuesSummaryCharts = () => {
       .filter(d => d.status === 'unpaid')
       .reduce((sum, d) => sum + (d.penaltyAmount || 0), 0);
 
-    // monthly collection breakdown: group paid dues by billing month
+    
     const monthlyCollection = {};
     dues
       .filter(d => d.status === 'paid')
@@ -114,7 +113,7 @@ export const DuesSummaryCharts = () => {
         <p className="text-xs text-slate-500 mt-0.5">Overview of payment collection, overdue accounts, and pending balances</p>
       </div>
 
-      {/* KPI Cards */}
+      {}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Collected', value: `₱${stats.totalCollected.toLocaleString()}`, icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-900/30 border-emerald-800/50' },
@@ -135,10 +134,10 @@ export const DuesSummaryCharts = () => {
         })}
       </div>
 
-      {/* Account Standing + Dues Status */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* donut: homeowner standing */}
+        {}
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-slate-200 mb-4">Homeowner Account Standing</h3>
           <div className="flex items-center gap-6">
@@ -165,7 +164,7 @@ export const DuesSummaryCharts = () => {
           </div>
         </div>
 
-        {/* bar chart: dues status */}
+        {}
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-slate-200 mb-5">Dues Payment Status</h3>
           <div className="space-y-4">
@@ -194,7 +193,7 @@ export const DuesSummaryCharts = () => {
         </div>
       </div>
 
-      {/* Monthly Collection Breakdown */}
+      {}
       {Object.keys(stats.monthlyCollection).length > 0 && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-slate-200 mb-4">Monthly Collection Breakdown</h3>

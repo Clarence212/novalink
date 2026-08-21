@@ -1,9 +1,6 @@
-// hey reader! frontend API client service connecting to PHP backend with local storage fallback
 const API_BASE_URL = '/backend/api';
 
-/**
- * Send OTP Verification Request to PHP Backend
- */
+
 export async function apiSendOtp(email, name = 'User', type = 'registration') {
   try {
     const res = await fetch(`${API_BASE_URL}/send_otp.php`, {
@@ -21,9 +18,7 @@ export async function apiSendOtp(email, name = 'User', type = 'registration') {
   }
 }
 
-/**
- * Verify OTP Code with PHP Backend
- */
+
 export async function apiVerifyOtp(email, otp, type = 'registration') {
   try {
     const res = await fetch(`${API_BASE_URL}/verify_email.php`, {
@@ -41,9 +36,7 @@ export async function apiVerifyOtp(email, otp, type = 'registration') {
   }
 }
 
-/**
- * Send System Notification Email
- */
+
 export async function apiSendNotification(email, name, title, message) {
   try {
     const res = await fetch(`${API_BASE_URL}/send_notification.php`, {

@@ -1,4 +1,3 @@
-// hey reader! vite configuration optimized for web production with vendor chunk splitting
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';

@@ -26,11 +26,11 @@ if (!$email) {
 }
 
 try {
-    // getDbConnection handles failure silently for local testing thanks to our earlier fix
+    
     $pdo = getDbConnection();
     $emailService = new EmailService();
 
-    // Reusing the announcement broadcast format for general system notifications
+    
     $res = $emailService->sendAnnouncementBroadcast($email, $title, $message, 'SYSTEM');
 
     echo json_encode([

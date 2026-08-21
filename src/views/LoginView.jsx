@@ -1,4 +1,3 @@
-// hey reader! high fidelity login view crafted to match your design concept image
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, Bell, UserCheck, ArrowRight, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -12,10 +11,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // modal state for register and forgot password
-  const [activeModal, setActiveModal] = useState(null); // 'register' | 'forgot' | null
+  
+  const [activeModal, setActiveModal] = useState(null); 
 
-  // register state
+  
   const [regData, setRegData] = useState({
     fullName: '',
     email: '',
@@ -25,7 +24,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [regStep, setRegStep] = useState(1);
   const [regOtp, setRegOtp] = useState('');
 
-  // forgot password state
+  
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStep, setForgotStep] = useState(1);
   const [forgotOtp, setForgotOtp] = useState('');
@@ -63,7 +62,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     e.preventDefault();
     try {
       await apiVerifyOtp(regData.email, regOtp, 'registration');
-      // submit registration to system with pending status (admin needs to approve)
+      
       createUserAccount({ ...regData, role: 'resident', status: 'pending' });
       showToast('Registration submitted! Your account is pending NHAI Admin approval.', 'success');
       setActiveModal(null);
@@ -117,16 +116,16 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
   return (
     <div class="min-h-screen flex items-center justify-center px-4 py-8 bg-slate-900">
-      {/* main auth card container */}
+      {}
       <div class="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px] border border-slate-200/50">
         
-        {/* LEFT PANEL - Hero Side (Vibrant Gradient) */}
+        {}
         <div class="md:col-span-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-8 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden">
-          {/* background decorative glowing circles */}
+          {}
           <div class="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
           <div class="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-blue-400/20 blur-3xl pointer-events-none"></div>
 
-          {/* brand header */}
+          {}
           <div class="relative z-10 space-y-6">
             <div class="w-20 h-20 bg-white/95 rounded-2xl shadow-lg flex items-center justify-center mb-6">
               <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center font-extrabold text-white text-2xl shadow-inner">
@@ -140,7 +139,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
             </div>
           </div>
 
-          {/* feature highlights */}
+          {}
           <div class="relative z-10 space-y-6 my-8">
             <div class="flex items-start gap-4">
               <div class="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
@@ -184,16 +183,16 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           </div>
         </div>
 
-        {/* RIGHT PANEL - Form Side */}
+        {}
         <div class="md:col-span-6 p-8 lg:p-12 bg-white flex flex-col justify-between text-slate-800">
           <div>
-            {/* Header */}
+            {}
             <div class="mb-8">
               <h2 class="text-2xl lg:text-3xl font-bold text-slate-900">Welcome Back</h2>
               <p class="text-slate-500 text-xs mt-1">Sign in to continue to your dashboard</p>
             </div>
 
-            {/* Login Form */}
+            {}
             <form onSubmit={handleSignIn} class="space-y-4">
               <div>
                 <label class="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
@@ -232,7 +231,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                 </div>
               </div>
 
-              {/* Options row */}
+              {}
               <div class="flex items-center justify-between text-xs pt-1">
                 <label class="flex items-center gap-2 text-slate-600 cursor-pointer">
                   <input
@@ -252,7 +251,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                 </button>
               </div>
 
-              {/* Sign in button */}
+              {}
               <button
                 type="submit"
                 onClick={handleSignIn}
@@ -262,7 +261,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               </button>
             </form>
 
-            {/* Registration link */}
+            {}
             <div class="text-center text-xs text-slate-600 my-5">
               Don't have an account?{' '}
               <button

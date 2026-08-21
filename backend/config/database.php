@@ -1,5 +1,5 @@
 <?php
-// hey reader! database connection configuration using PDO
+
 require_once __DIR__ . '/env.php';
 
 function getDbConnection() {
@@ -12,7 +12,7 @@ function getDbConnection() {
         ]);
         return $pdo;
     } catch (PDOException $e) {
-        // Return null instead of exiting, so EmailService can still test the Brevo API locally without MySQL
+        
         return null;
     }
 }

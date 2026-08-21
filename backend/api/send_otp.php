@@ -1,5 +1,5 @@
 <?php
-// hey reader! REST API endpoint for generating and sending OTP email verification codes
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -17,7 +17,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 
 $email = filter_var($input['email'] ?? '', FILTER_VALIDATE_EMAIL);
 $name = trim($input['name'] ?? 'User');
-$type = $input['type'] ?? 'registration'; // 'registration' | 'guest' | 'reset'
+$type = $input['type'] ?? 'registration'; 
 
 if (!$email) {
     http_response_code(400);
@@ -29,7 +29,7 @@ try {
     $pdo = getDbConnection();
     $emailService = new EmailService();
 
-    // generate secure 6-digit OTP code
+    
     $otpCode = sprintf('%06d', mt_rand(0, 999999));
     $expiresAt = date('Y-m-d H:i:s', strtotime('+15 minutes'));
     $id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
@@ -47,7 +47,7 @@ try {
             $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
             $purpose = 'Guest Facility Reservation';
         } else {
-            // find user if existing
+            
             $stmt = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
             $stmt->execute([$email]);
             $user = $stmt->fetch();
@@ -61,11 +61,11 @@ try {
             $purpose = 'Account Registration Verification';
         }
     } else {
-        // Fallback purposes if no DB (local testing)
+        
         $purpose = ($type === 'guest') ? 'Guest Facility Reservation' : 'Account Registration Verification';
     }
 
-    // dispatch email
+    
     $res = $emailService->sendOtpEmail($email, $name, $otpCode, $purpose);
 
     echo json_encode([

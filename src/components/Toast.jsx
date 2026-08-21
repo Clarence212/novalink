@@ -1,4 +1,3 @@
-// hey reader! feedback toast popup component for application status updates
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';

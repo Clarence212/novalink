@@ -1,4 +1,3 @@
-// hey reader! main dashboard container adapting dynamically to user roles
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { ShieldCheck, Lock, CheckCircle, Calendar, AlertTriangle, FileText, CreditCard } from 'lucide-react';
@@ -40,7 +39,7 @@ export const DashboardView = () => {
 
   return (
     <div class="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Role Banner */}
+      {}
       <div class="p-6 rounded-3xl bg-slate-800 border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 class="text-2xl font-bold text-white">Welcome back, {currentUser?.fullName}!</h2>
@@ -55,7 +54,7 @@ export const DashboardView = () => {
         )}
       </div>
 
-      {/* Overview Cards */}
+      {}
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="p-5 rounded-2xl bg-slate-800/60 border border-slate-700">
           <div class="text-slate-400 text-xs font-medium">Account Status</div>

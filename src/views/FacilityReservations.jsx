@@ -1,4 +1,3 @@
-// hey reader! facility reservations — residents request, admin approves, guests can book designated facilities
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, X, Calendar, CheckCircle, XCircle } from 'lucide-react';
@@ -47,7 +46,7 @@ export const FacilityReservations = () => {
         )}
       </div>
 
-      {/* Facilities List */}
+      {}
       <div>
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Available Facilities</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -63,7 +62,7 @@ export const FacilityReservations = () => {
         </div>
       </div>
 
-      {/* Reservation Request Form */}
+      {}
       {!isAdmin && showForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -104,7 +103,7 @@ export const FacilityReservations = () => {
         </div>
       )}
 
-      {/* Reservations Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">{isAdmin ? 'All Reservation Requests' : 'My Reservations'}</h3>

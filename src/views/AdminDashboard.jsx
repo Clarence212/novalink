@@ -1,4 +1,3 @@
-// hey reader! admin dashboard featuring the modern card grid UI design concept
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import {
@@ -18,7 +17,7 @@ export const AdminDashboard = ({ setActiveView }) => {
   const openConcerns = concerns.filter(c => c.status === 'pending').length;
   const pendingStickers = stickerRenewals.filter(s => s.status === 'pending').length;
 
-  // Modern UI Card Grid matching the exact design concept
+  
   const adminModules = [
     {
       id: 'announcements',
@@ -104,7 +103,7 @@ export const AdminDashboard = ({ setActiveView }) => {
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
-      {/* Welcome Greeting Header matching screenshot concept */}
+      {}
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
           Good morning, {displayName}! 👋
@@ -112,7 +111,7 @@ export const AdminDashboard = ({ setActiveView }) => {
         <p className="text-sm text-slate-400 mt-1">Welcome to your NHAI administration portal</p>
       </div>
 
-      {/* Action Required Banner if pending items */}
+      {}
       {(pendingPayments > 0 || pendingUsers > 0 || pendingReservations > 0) && (
         <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-700/50 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -144,7 +143,7 @@ export const AdminDashboard = ({ setActiveView }) => {
         </div>
       )}
 
-      {/* Main Module Cards Grid (2 rows x 3 cols layout from UI Concept) */}
+      {}
       <div>
         <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Management Modules</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -1,4 +1,3 @@
-// hey reader! guard dashboard and visitor logging module — all in one view
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Search, LogOut, Clock, Shield } from 'lucide-react';
@@ -44,7 +43,7 @@ export const GuardDashboard = () => {
         </button>
       </div>
 
-      {/* Stats */}
+      {}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
           <div className="text-2xl font-bold text-blue-400">{visitorLogs.length}</div>
@@ -60,7 +59,7 @@ export const GuardDashboard = () => {
         </div>
       </div>
 
-      {/* Log Entry Form */}
+      {}
       {showForm && (
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <h3 className="text-sm font-bold text-slate-200 mb-4">New Visitor Entry</h3>
@@ -96,7 +95,7 @@ export const GuardDashboard = () => {
         </div>
       )}
 
-      {/* Search + Visitor Log Table */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-700 flex items-center gap-3">
           <Search className="w-4 h-4 text-slate-500" />
@@ -153,7 +152,7 @@ export const GuardDashboard = () => {
         </div>
       </div>
 
-      {/* Announcements for guard */}
+      {}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
         <h3 className="text-sm font-bold text-slate-200 mb-3">Community Announcements</h3>
         <div className="space-y-2">
