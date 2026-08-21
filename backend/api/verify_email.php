@@ -72,23 +72,43 @@ try {
         $record = $stmt->fetch();
 
         if (!$record) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid or expired verification code.']);
-            exit;
+            // Fallback to check guest_email_verifications for new registrations
+            $stmt = $pdo->prepare("
+                SELECT guest_verification_id, expires_at, verified_at
+                FROM guest_email_verifications
+                WHERE guest_email = ? AND otp_code = ? AND verified_at IS NULL
+                ORDER BY created_at DESC LIMIT 1
+            ");
+            $stmt->execute([$email, $otpCode]);
+            $guestRecord = $stmt->fetch();
+
+            if (!$guestRecord) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid or expired verification code.']);
+                exit;
+            }
+
+            if (strtotime($guestRecord['expires_at']) < time()) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Verification code has expired. Please request a new code.']);
+                exit;
+            }
+
+            $stmt = $pdo->prepare("UPDATE guest_email_verifications SET verified_at = NOW() WHERE guest_verification_id = ?");
+            $stmt->execute([$guestRecord['guest_verification_id']]);
+        } else {
+            if (strtotime($record['expires_at']) < time()) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Verification code has expired. Please request a new code.']);
+                exit;
+            }
+
+            $stmt = $pdo->prepare("UPDATE account_email_verifications SET verified_at = NOW() WHERE verification_id = ?");
+            $stmt->execute([$record['verification_id']]);
+
+            $stmt = $pdo->prepare("UPDATE users SET email_verified = 1, email_verified_at = NOW() WHERE user_id = ?");
+            $stmt->execute([$record['user_id']]);
         }
-
-        if (strtotime($record['expires_at']) < time()) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Verification code has expired. Please request a new code.']);
-            exit;
-        }
-
-        
-        $stmt = $pdo->prepare("UPDATE account_email_verifications SET verified_at = NOW() WHERE verification_id = ?");
-        $stmt->execute([$record['verification_id']]);
-
-        $stmt = $pdo->prepare("UPDATE users SET email_verified = 1, email_verified_at = NOW() WHERE user_id = ?");
-        $stmt->execute([$record['user_id']]);
     }
 
     echo json_encode([

@@ -47,18 +47,28 @@ try {
             $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
             $purpose = 'Guest Facility Reservation';
         } else {
-            
             $stmt = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
             $stmt->execute([$email]);
             $user = $stmt->fetch();
-            $userId = $user ? $user['user_id'] : $id;
 
-            $stmt = $pdo->prepare("
-                INSERT INTO account_email_verifications (verification_id, user_id, otp_code, token_hash, expires_at)
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([$id, $userId, $otpCode, password_hash($otpCode, PASSWORD_BCRYPT), $expiresAt]);
-            $purpose = 'Account Registration Verification';
+            if ($user) {
+                $userId = $user['user_id'];
+                $stmt = $pdo->prepare("
+                    INSERT INTO account_email_verifications (verification_id, user_id, otp_code, token_hash, expires_at)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$id, $userId, $otpCode, password_hash($otpCode, PASSWORD_BCRYPT), $expiresAt]);
+                $purpose = 'Account Registration Verification';
+            } else {
+                // If user doesn't exist, we must use the guest table because account_email_verifications
+                // requires a valid user_id foreign key and doesn't store the email address directly.
+                $stmt = $pdo->prepare("
+                    INSERT INTO guest_email_verifications (guest_verification_id, guest_email, guest_name, otp_code, expires_at)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
+                $purpose = 'Account Registration Verification';
+            }
         }
     } else {
         
