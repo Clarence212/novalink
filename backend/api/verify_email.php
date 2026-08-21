@@ -95,7 +95,7 @@ try {
         'message' => 'Email verified successfully.'
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['error' => 'Failed to verify email: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Failed to verify email: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine()]);
 }
