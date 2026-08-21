@@ -73,9 +73,11 @@ try {
         'message' => 'Verification OTP code dispatched successfully.',
         'expires_at' => $expiresAt,
     ]);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     if (!headers_sent()) {
         http_response_code(500);
     }
-    echo json_encode(['error' => 'Failed to process OTP request: ' . $e->getMessage()]);
+    $errorMsg = 'Failed to process OTP request: ' . $e->getMessage() . ' on line ' . $e->getLine() . ' in ' . $e->getFile();
+    $json = json_encode(['error' => $errorMsg]);
+    echo $json ?: '{"error": "Failed to encode error message"}';
 }
