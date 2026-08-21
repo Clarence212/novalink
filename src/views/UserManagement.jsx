@@ -48,7 +48,10 @@ export const UserManagement = () => {
   };
 
   const filtered = users.filter(u => {
-    const matchSearch = u.fullName.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+    const nameStr = (u?.fullName || u?.name || '').toLowerCase();
+    const emailStr = (u?.email || '').toLowerCase();
+    const searchLower = (search || '').toLowerCase();
+    const matchSearch = nameStr.includes(searchLower) || emailStr.includes(searchLower);
     const matchStatus = filterStatus === 'all' || u.status === filterStatus;
     return matchSearch && matchStatus;
   });
