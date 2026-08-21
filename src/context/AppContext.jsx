@@ -41,8 +41,6 @@ const loadPersistedData = (key, fallback) => {
 
 const seedUsersWithPasswords = (users) => users.map(u => ({
   ...u,
-  // Retroactively fix accounts registered during the hardcoded 'active' bug
-  status: (u.role === 'resident' && u.id !== 'u3' && !u.manuallyApproved) ? 'pending' : u.status,
   passwordHash: u.passwordHash || simpleHash('novalink2026')
 }));
 
