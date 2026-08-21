@@ -74,6 +74,8 @@ try {
         'expires_at' => $expiresAt,
     ]);
 } catch (Exception $e) {
-    http_response_code(500);
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
     echo json_encode(['error' => 'Failed to process OTP request: ' . $e->getMessage()]);
 }
