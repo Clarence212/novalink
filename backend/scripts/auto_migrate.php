@@ -11,10 +11,10 @@ require_once __DIR__ . '/../config/database.php';
 try {
     $pdo = requireDbConnection();
 
-    // Disable FK checks temporarily for safe table setup
+    // Disable FK checks temporarily for safe schema modification
     $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
 
-    // 1. Create ALL tables if they do not exist
+    // 1. Create missing tables if they do not exist
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS schema_migrations (
           migration_id VARCHAR(100) PRIMARY KEY,
@@ -360,6 +360,30 @@ try {
         ON DUPLICATE KEY UPDATE setting_value = setting_value;
     ");
 
+    // Helper to safely rename or add column
+    $migrateColumn = function (PDO $pdo, string $table, string $oldColumn, string $newColumn, string $definition) {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+              AND TABLE_NAME = ? 
+              AND COLUMN_NAME = ?
+        ");
+        
+        $stmt->execute([$table, $newColumn]);
+        $hasNew = ((int) $stmt->fetchColumn()) > 0;
+
+        if (!$hasNew) {
+            $stmt->execute([$table, $oldColumn]);
+            $hasOld = ((int) $stmt->fetchColumn()) > 0;
+            if ($hasOld) {
+                $pdo->exec("ALTER TABLE `{$table}` CHANGE COLUMN `{$oldColumn}` `{$newColumn}` {$definition}");
+            } else {
+                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$newColumn}` {$definition}");
+            }
+        }
+    };
+
     // Helper to safely add a column if it doesn't exist
     $addColumn = function (PDO $pdo, string $table, string $column, string $definition) {
         $stmt = $pdo->prepare("
@@ -375,7 +399,8 @@ try {
         }
     };
 
-    // 2. Add missing columns safely
+    // 2. Perform safe column migrations/renames for legacy v1 tables
+    // Users table
     $addColumn($pdo, 'users', 'approved_by_user_id', 'CHAR(36) NULL');
     $addColumn($pdo, 'users', 'approved_at', 'DATETIME NULL');
     $addColumn($pdo, 'users', 'force_password_change', 'TINYINT(1) NOT NULL DEFAULT 0');
@@ -383,32 +408,49 @@ try {
     $addColumn($pdo, 'users', 'locked_until', 'DATETIME NULL');
     $addColumn($pdo, 'users', 'last_login_at', 'DATETIME NULL');
 
-    $addColumn($pdo, 'facilities', 'rate_label', 'VARCHAR(100) NOT NULL DEFAULT ""');
+    // Announcements
+    $migrateColumn($pdo, 'announcements', 'posted_by', 'posted_by_user_id', 'CHAR(36) NOT NULL');
+    $migrateColumn($pdo, 'announcements', 'date_posted', 'published_at', 'DATETIME NULL');
+
+    // Visitor logs
+    $migrateColumn($pdo, 'visitor_logs', 'recorded_by', 'recorded_by_user_id', 'CHAR(36) NOT NULL');
+
+    // Concerns
+    $migrateColumn($pdo, 'concerns', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NOT NULL');
+    $migrateColumn($pdo, 'concerns', 'responded_by', 'responded_by_user_id', 'CHAR(36) NULL');
+
+    // Facilities
+    $migrateColumn($pdo, 'facilities', 'rate', 'rate_label', 'VARCHAR(100) NOT NULL DEFAULT ""');
     $addColumn($pdo, 'facilities', 'guest_bookable', 'TINYINT(1) NOT NULL DEFAULT 1');
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'facilities' AND COLUMN_NAME = 'rate'");
-    $stmt->execute();
-    if ((int) $stmt->fetchColumn() > 0) {
-        $pdo->exec("UPDATE facilities SET rate_label = rate WHERE rate_label = '' OR rate_label IS NULL");
-    }
-
-    $addColumn($pdo, 'vehicles', 'submitted_by_user_id', 'CHAR(36) NULL');
-    $addColumn($pdo, 'vehicles', 'reviewed_by_user_id', 'CHAR(36) NULL');
-
-    $addColumn($pdo, 'vehicle_sticker_renewals', 'requested_by_user_id', 'CHAR(36) NULL');
-    $addColumn($pdo, 'vehicle_sticker_renewals', 'reviewed_by_user_id', 'CHAR(36) NULL');
-
-    $addColumn($pdo, 'payments', 'submitted_by_user_id', 'CHAR(36) NULL');
-    $addColumn($pdo, 'payments', 'validated_by_user_id', 'CHAR(36) NULL');
-    $addColumn($pdo, 'payments', 'proof_stored_name', 'VARCHAR(255) NULL');
-    $addColumn($pdo, 'payments', 'proof_original_name', 'VARCHAR(255) NULL');
-    $addColumn($pdo, 'payments', 'proof_mime_type', 'VARCHAR(100) NULL');
-    $addColumn($pdo, 'payments', 'proof_file_size', 'INT UNSIGNED NOT NULL DEFAULT 0');
-
+    // Facility Reservations
+    $migrateColumn($pdo, 'facility_reservations', 'approved_by', 'reviewed_by_user_id', 'CHAR(36) NULL');
     $addColumn($pdo, 'facility_reservations', 'requester_type', "ENUM('resident', 'guest') NOT NULL DEFAULT 'resident'");
     $addColumn($pdo, 'facility_reservations', 'guest_id', 'CHAR(36) NULL');
     $addColumn($pdo, 'facility_reservations', 'total_amount', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     $addColumn($pdo, 'facility_reservations', 'reference_number', 'VARCHAR(32) NULL');
+
+    // Vehicles
+    $migrateColumn($pdo, 'vehicles', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
+    $migrateColumn($pdo, 'vehicles', 'reviewed_by', 'reviewed_by_user_id', 'CHAR(36) NULL');
+
+    // Sticker Renewals
+    $migrateColumn($pdo, 'vehicle_sticker_renewals', 'requested_by', 'requested_by_user_id', 'CHAR(36) NULL');
+    $migrateColumn($pdo, 'vehicle_sticker_renewals', 'reviewed_by', 'reviewed_by_user_id', 'CHAR(36) NULL');
+    $migrateColumn($pdo, 'vehicle_sticker_renewals', 'approved_at', 'reviewed_at', 'DATETIME NULL');
+
+    // Payments
+    $migrateColumn($pdo, 'payments', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
+    $migrateColumn($pdo, 'payments', 'validated_by', 'validated_by_user_id', 'CHAR(36) NULL');
+    $migrateColumn($pdo, 'payments', 'proof_image_path', 'proof_stored_name', 'VARCHAR(255) NULL');
+    $addColumn($pdo, 'payments', 'proof_original_name', 'VARCHAR(255) NULL');
+    $addColumn($pdo, 'payments', 'proof_mime_type', 'VARCHAR(100) NULL');
+    $addColumn($pdo, 'payments', 'proof_file_size', 'INT UNSIGNED NOT NULL DEFAULT 0');
+
+    // Notifications
+    $migrateColumn($pdo, 'notifications', 'email_type', 'notification_type', 'VARCHAR(60) NOT NULL');
+    $migrateColumn($pdo, 'notifications', 'body_text', 'message_text', 'TEXT NOT NULL');
+    $migrateColumn($pdo, 'notifications', 'status', 'delivery_status', "ENUM('queued', 'sent', 'failed') NOT NULL DEFAULT 'queued'");
 
     $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
     $pdo->exec("INSERT INTO schema_migrations (migration_id) VALUES ('001_production_schema') ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id)");
