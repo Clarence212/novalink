@@ -29,9 +29,7 @@ export const Navbar = ({ onSignOut, onOpenEmailLog, onSearchModule, toggleSideba
         </button>
 
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center p-0.5 shadow-sm border border-slate-200 overflow-hidden">
-            <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-full h-full object-contain" />
-          </div>
+          <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-9 h-9 object-contain shrink-0" />
           <div>
             <div className="text-sm font-extrabold text-slate-800 tracking-tight leading-none">NovaLink Portal</div>
             <div className="text-[10px] text-slate-400 font-medium mt-0.5">HOA Management System</div>
