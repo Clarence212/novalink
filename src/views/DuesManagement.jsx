@@ -8,35 +8,61 @@ const statusBadge = (s) => {
 };
 
 export const DuesManagement = () => {
-  const { currentUser, currentHomeowner, dues, payments, homeowners, validatePayment, rejectPayment, submitPaymentProof, paymentQRCode, showToast, sendDuesReminder } = useApp();
+  const { currentUser, currentHomeowner, dues, payments, homeowners, validatePayment, rejectPayment, submitPaymentProof, paymentQRCode, sendDuesReminder, generateDues, updatePaymentQr } = useApp();
   const isAdmin = currentUser?.role === 'admin';
 
   const [showPayForm, setShowPayForm] = useState(false);
-  const [payForm, setPayForm] = useState({ amount: '', reference: '' });
+  const [showGenerateForm, setShowGenerateForm] = useState(false);
+  const [showQrForm, setShowQrForm] = useState(false);
+  const [payForm, setPayForm] = useState({ amount: '', reference: '', proofFile: null });
+  const [duesForm, setDuesForm] = useState({ month: new Date().toISOString().slice(0, 7), amount: '1500', dueDate: '' });
+  const [qrForm, setQrForm] = useState({ provider: 'GCash', accountName: '', accountNumber: '', image: null });
   const [selectedPayment, setSelectedPayment] = useState(null);
 
   const myDues = isAdmin ? dues : dues.filter(d => d.homeownerId === currentHomeowner?.id);
   const myPayments = isAdmin ? payments : payments.filter(p => p.homeownerId === currentHomeowner?.id);
   const pendingPayments = payments.filter(p => p.validationStatus === 'pending');
 
-  const totalBalance = myDues.filter(d => d.status === 'unpaid').reduce((sum, d) => sum + d.amountDue + d.penaltyAmount, 0);
+  const totalBalance = myDues.filter(d => d.status === 'unpaid').reduce((sum, d) => sum + (d.balanceDue ?? d.amountDue + d.penaltyAmount), 0);
 
-  const handleSubmitProof = (e) => {
+  const handleSubmitProof = async (e) => {
     e.preventDefault();
-    submitPaymentProof(currentHomeowner?.id, { amount: parseFloat(payForm.amount), reference: payForm.reference });
-    setPayForm({ amount: '', reference: '' });
-    setShowPayForm(false);
+    const result = await submitPaymentProof(currentHomeowner?.id, {
+      amount: Number(payForm.amount),
+      reference: payForm.reference,
+      proofFile: payForm.proofFile,
+    });
+    if (result.success) {
+      setPayForm({ amount: '', reference: '', proofFile: null });
+      setShowPayForm(false);
+    }
   };
 
-  const handleValidate = (paymentId) => {
-    const payment = payments.find(p => p.id === paymentId);
-    if (!payment) return;
-    
-    const unpaid = dues.filter(d => d.homeownerId === payment.homeownerId && d.status === 'unpaid');
-    const monthsCount = Math.floor(payment.amountPaid / 1500);
-    const coveredMonths = unpaid.slice(0, monthsCount).map(d => d.billingMonth);
-    validatePayment(paymentId, coveredMonths);
-    setSelectedPayment(null);
+  const handleValidate = async (paymentId) => {
+    const result = await validatePayment(paymentId);
+    if (result.success) setSelectedPayment(null);
+  };
+
+  const handleGenerateDues = async (event) => {
+    event.preventDefault();
+    const result = await generateDues({ ...duesForm, amount: Number(duesForm.amount) });
+    if (result.success) setShowGenerateForm(false);
+  };
+
+  const openQrSettings = () => {
+    setQrForm({
+      provider: paymentQRCode.provider || 'GCash',
+      accountName: paymentQRCode.gcashName === 'Not configured' ? '' : paymentQRCode.gcashName,
+      accountNumber: paymentQRCode.gcashNumber || '',
+      image: null,
+    });
+    setShowQrForm(true);
+  };
+
+  const handleUpdateQr = async (event) => {
+    event.preventDefault();
+    const result = await updatePaymentQr(qrForm);
+    if (result.success) setShowQrForm(false);
   };
 
   return (
@@ -48,6 +74,18 @@ export const DuesManagement = () => {
         </div>
         {isAdmin && (
           <div className="flex gap-2">
+            <button
+              onClick={openQrSettings}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition"
+            >
+              Payment QR Settings
+            </button>
+            <button
+              onClick={() => setShowGenerateForm(!showGenerateForm)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+            >
+              Generate Monthly Dues
+            </button>
             <button
               onClick={() => sendDuesReminder()}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition"
@@ -66,6 +104,57 @@ export const DuesManagement = () => {
         )}
       </div>
 
+      {isAdmin && showGenerateForm && (
+        <form onSubmit={handleGenerateDues} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Billing Month</span>
+            <input type="month" required value={duesForm.month} onChange={event => setDuesForm({ ...duesForm, month: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Amount (₱)</span>
+            <input type="number" required min="0.01" step="0.01" value={duesForm.amount} onChange={event => setDuesForm({ ...duesForm, amount: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Due Date</span>
+            <input type="date" required value={duesForm.dueDate} onChange={event => setDuesForm({ ...duesForm, dueDate: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <button type="submit" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">Create Missing Records</button>
+          <p className="sm:col-span-4 text-[10px] text-slate-500">Existing records for that month are left unchanged.</p>
+        </form>
+      )}
+
+      {isAdmin && showQrForm && (
+        <form onSubmit={handleUpdateQr} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Provider</span>
+            <input type="text" required value={qrForm.provider} onChange={event => setQrForm({ ...qrForm, provider: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Account Name</span>
+            <input type="text" required value={qrForm.accountName} onChange={event => setQrForm({ ...qrForm, accountName: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">Account Number</span>
+            <input type="text" required value={qrForm.accountNumber} onChange={event => setQrForm({ ...qrForm, accountNumber: event.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <label>
+            <span className="block text-xs font-medium text-slate-400 mb-1">QR Image (optional replacement)</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setQrForm({ ...qrForm, image: event.target.files?.[0] || null })}
+              className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white bg-slate-700 border border-slate-600 rounded-xl p-1" />
+          </label>
+          <div className="sm:col-span-2 flex gap-2">
+            <button type="submit" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">Save Payment Details</button>
+            <button type="button" onClick={() => setShowQrForm(false)} className="px-4 py-2 rounded-xl bg-slate-700 text-slate-300 text-xs font-semibold">Cancel</button>
+          </div>
+        </form>
+      )}
+
       {}
       {!isAdmin && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -77,7 +166,9 @@ export const DuesManagement = () => {
             {totalBalance > 0 && <div className="text-[11px] text-red-400/70 mt-1">Includes accumulated penalties</div>}
           </div>
           <div className="p-5 rounded-2xl bg-slate-800 border border-slate-700 flex flex-col items-center justify-center gap-2">
-            <QrCode className="w-10 h-10 text-blue-400" />
+            {paymentQRCode.imagePath
+              ? <img src={paymentQRCode.imagePath} alt={`${paymentQRCode.provider} payment QR code`} className="w-32 h-32 object-contain rounded-lg bg-white p-1" />
+              : <QrCode className="w-10 h-10 text-blue-400" />}
             <div className="text-xs font-bold text-slate-200">{paymentQRCode.gcashName}</div>
             <div className="text-xs text-blue-400 font-mono">{paymentQRCode.gcashNumber}</div>
             <div className="text-[10px] text-slate-500">Scan QR Code to pay via GCash</div>
@@ -95,7 +186,7 @@ export const DuesManagement = () => {
           <form onSubmit={handleSubmitProof} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Amount Paid (₱)</label>
-              <input type="number" required value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })}
+              <input type="number" required min="0.01" step="0.01" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })}
                 placeholder="e.g. 1500" className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200 focus:outline-none focus:border-blue-500" />
             </div>
             <div>
@@ -107,11 +198,10 @@ export const DuesManagement = () => {
               <label className="block text-xs font-medium text-slate-400 mb-1">Proof of Payment Screenshot / Receipt</label>
               <input
                 type="file"
+                required
                 accept="image/*"
                 onChange={e => {
-                  if (e.target.files?.[0]) {
-                    setPayForm({ ...payForm, proofImage: URL.createObjectURL(e.target.files[0]) });
-                  }
+                  setPayForm({ ...payForm, proofFile: e.target.files?.[0] || null });
                 }}
                 className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer bg-slate-700 p-1 border border-slate-600 rounded-xl"
               />
@@ -141,6 +231,9 @@ export const DuesManagement = () => {
                     <div className="text-[10px] text-slate-500">{p.paymentDate}</div>
                   </div>
                   <div className="flex gap-2">
+                    <a href={p.proofImage} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold transition">
+                      View Proof
+                    </a>
                     <button onClick={() => handleValidate(p.id)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" /> Validate
                     </button>

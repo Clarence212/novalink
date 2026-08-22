@@ -19,18 +19,22 @@ export const ResidentConcerns = () => {
 
   const myConcerns = isAdmin ? concerns : concerns.filter(c => c.homeownerId === currentHomeowner?.id);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    submitConcern(form);
-    setForm({ concernType: 'Maintenance', subject: '', description: '' });
-    setShowForm(false);
+    const result = await submitConcern(form);
+    if (result.success) {
+      setForm({ concernType: 'Maintenance', subject: '', description: '' });
+      setShowForm(false);
+    }
   };
 
-  const handleRespond = (e) => {
+  const handleRespond = async (e) => {
     e.preventDefault();
-    respondToConcern(selectedConcern.id, responseForm.response, responseForm.status);
-    setSelectedConcern(null);
-    setResponseForm({ response: '', status: 'in-progress' });
+    const result = await respondToConcern(selectedConcern.id, responseForm.response, responseForm.status);
+    if (result.success) {
+      setSelectedConcern(null);
+      setResponseForm({ response: '', status: 'in-progress' });
+    }
   };
 
   const concernTypes = ['Maintenance', 'Security', 'Noise Complaint', 'Sanitation', 'Billing Inquiry', 'Request', 'Other'];

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ClipboardList, CheckCircle, XCircle, Plus } from 'lucide-react';
 
@@ -8,16 +8,17 @@ const statusBadge = (s) => {
 };
 
 export const StickerRenewals = () => {
-  const { currentUser, currentHomeowner, vehicles, stickerRenewals, homeowners, submitStickerRenewal, reviewStickerRenewal, showToast } = useApp();
+  const { currentUser, currentHomeowner, vehicles, stickerRenewals, homeowners, stickerRenewalPeriod, submitStickerRenewal, reviewStickerRenewal, setStickerRenewalPeriod, showToast } = useApp();
   const isAdmin = currentUser?.role === 'admin';
+  const [periodInput, setPeriodInput] = useState(stickerRenewalPeriod || '');
 
   const myVehicles = vehicles.filter(v => v.homeownerId === currentHomeowner?.id && v.approvalStatus === 'approved');
   const myRenewals = isAdmin ? stickerRenewals : stickerRenewals.filter(r => r.homeownerId === currentHomeowner?.id);
 
-  const handleRequest = (vehicleId) => {
-    const existing = stickerRenewals.find(r => r.vehicleId === vehicleId && r.status === 'pending');
+  const handleRequest = async (vehicleId) => {
+    const existing = stickerRenewals.find(r => r.vehicleId === vehicleId && r.renewalPeriod === stickerRenewalPeriod && r.status === 'pending');
     if (existing) { showToast('A renewal request is already pending for this vehicle.', 'warning'); return; }
-    submitStickerRenewal(vehicleId);
+    await submitStickerRenewal(vehicleId);
   };
 
   return (
@@ -26,6 +27,17 @@ export const StickerRenewals = () => {
         <h2 className="text-xl font-bold text-slate-100">HOA Vehicle Sticker Renewals</h2>
         <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Review and process HOA vehicle sticker renewal requests' : 'Request sticker renewals for your approved registered vehicles'}</p>
       </div>
+
+      {isAdmin && (
+        <form onSubmit={async event => { event.preventDefault(); await setStickerRenewalPeriod(periodInput || stickerRenewalPeriod); }} className="flex items-end gap-3 bg-slate-800 border border-slate-700 rounded-2xl p-4">
+          <label className="flex-1 max-w-xs">
+            <span className="block text-xs font-medium text-slate-400 mb-1">Active Renewal Period</span>
+            <input type="text" required pattern="\d{4}-\d{4}" placeholder="2026-2027" value={periodInput || stickerRenewalPeriod}
+              onChange={event => setPeriodInput(event.target.value)} className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200" />
+          </label>
+          <button type="submit" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">Update Period</button>
+        </form>
+      )}
 
       {}
       {!isAdmin && (
@@ -38,14 +50,14 @@ export const StickerRenewals = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {myVehicles.map(v => {
-                const hasPendingRenewal = stickerRenewals.some(r => r.vehicleId === v.id && r.status === 'pending');
-                const hasApproved = stickerRenewals.some(r => r.vehicleId === v.id && r.status === 'approved');
+                const hasPendingRenewal = stickerRenewals.some(r => r.vehicleId === v.id && r.renewalPeriod === stickerRenewalPeriod && r.status === 'pending');
+                const hasApproved = stickerRenewals.some(r => r.vehicleId === v.id && r.renewalPeriod === stickerRenewalPeriod && r.status === 'approved');
                 return (
                   <div key={v.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-bold text-slate-200">{v.makeModel}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">{v.plateNumber} · {v.color} · {v.type}</div>
-                      {hasApproved && <div className="text-[10px] text-emerald-400 mt-0.5">✓ Active sticker for 2026-2027</div>}
+                      <div className="text-[11px] text-slate-400 mt-0.5">{v.plateNumber} · {v.color} · {v.vehicleType}</div>
+                      {hasApproved && <div className="text-[10px] text-emerald-400 mt-0.5">✓ Active sticker for {stickerRenewalPeriod}</div>}
                       {hasPendingRenewal && <div className="text-[10px] text-amber-400 mt-0.5">Renewal request pending...</div>}
                     </div>
                     {!hasPendingRenewal && !hasApproved && (

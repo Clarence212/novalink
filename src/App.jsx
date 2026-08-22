@@ -23,11 +23,24 @@ import { StickerRenewals } from './views/StickerRenewals';
 import { GuestModeView } from './views/GuestModeView';
 
 const AppContent = () => {
-  const { currentUser, isGuestMode, setIsGuestMode, login, logout, showToast } = useApp();
+  const { currentUser, isGuestMode, setIsGuestMode, isBootstrapping, logout, changePassword } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
   const [showEmailLog, setShowEmailLog] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
 
   
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin mx-auto" />
+          <p className="text-xs mt-3">Connecting securely to NovaLink…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentUser && !isGuestMode) {
     return (
       <>
@@ -40,12 +53,63 @@ const AppContent = () => {
     );
   }
 
-  
-  const handleSetView = (view) => setActiveView(view);
+  if (currentUser?.forcePasswordChange) {
+    const handleRequiredPasswordChange = async (event) => {
+      event.preventDefault();
+      if (passwordForm.next !== passwordForm.confirm) return;
+      const result = await changePassword(passwordForm.current, passwordForm.next);
+      if (result.success) setPasswordForm({ current: '', next: '', confirm: '' });
+    };
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100">
+        <Toast />
+        <form onSubmit={handleRequiredPasswordChange} className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-7 space-y-4 shadow-2xl">
+          <div>
+            <h1 className="text-xl font-bold">Set your private password</h1>
+            <p className="text-xs text-slate-400 mt-1">Your administrator-issued password is temporary. Change it before continuing.</p>
+          </div>
+          <input type="password" required autoComplete="current-password" placeholder="Current password" value={passwordForm.current}
+            onChange={(event) => setPasswordForm({ ...passwordForm, current: event.target.value })}
+            className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-blue-500" />
+          <input type="password" required minLength={12} autoComplete="new-password" placeholder="New password (12+ characters)" value={passwordForm.next}
+            onChange={(event) => setPasswordForm({ ...passwordForm, next: event.target.value })}
+            className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-blue-500" />
+          <input type="password" required minLength={12} autoComplete="new-password" placeholder="Confirm new password" value={passwordForm.confirm}
+            onChange={(event) => setPasswordForm({ ...passwordForm, confirm: event.target.value })}
+            className={`w-full px-4 py-3 rounded-xl bg-slate-800 border text-sm focus:outline-none ${passwordForm.confirm && passwordForm.confirm !== passwordForm.next ? 'border-red-500' : 'border-slate-700 focus:border-blue-500'}`} />
+          {passwordForm.confirm && passwordForm.confirm !== passwordForm.next && <p className="text-xs text-red-400">Passwords do not match.</p>}
+          <button type="submit" disabled={passwordForm.next !== passwordForm.confirm}
+            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold transition">
+            Change Password & Continue
+          </button>
+        </form>
+      </div>
+    );
+  }
 
-  const handleSignOut = () => {
-    logout();
+  
+  const allowedViews = {
+    admin: new Set(['dashboard', 'homeowners', 'user-management', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'concerns', 'vehicles', 'stickers', 'email-log']),
+    security: new Set(['dashboard', 'visitor-management', 'announcements']),
+    resident: new Set(['dashboard', 'announcements', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers']),
+  };
+
+  const handleSetView = (view) => {
+    if (view === 'email-log' && currentUser?.role === 'admin') {
+      setShowEmailLog(true);
+      setSidebarOpen(false);
+      return;
+    }
+    if (allowedViews[currentUser?.role]?.has(view)) {
+      setActiveView(view);
+      setSidebarOpen(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await logout();
     setActiveView('dashboard');
+    setSidebarOpen(false);
   };
 
   
@@ -53,6 +117,13 @@ const AppContent = () => {
     if (isGuestMode) return <GuestModeView />;
 
     const role = currentUser?.role;
+    if (!allowedViews[role]?.has(activeView)) {
+      return role === 'admin'
+        ? <AdminDashboard setActiveView={handleSetView} />
+        : role === 'security'
+          ? <GuardDashboard />
+          : <ResidentDashboard setActiveView={handleSetView} />;
+    }
 
     
     if (activeView === 'dashboard') {
@@ -86,10 +157,12 @@ const AppContent = () => {
       <Navbar
         onSignOut={handleSignOut}
         onOpenEmailLog={() => setShowEmailLog(true)}
+        toggleSidebar={() => setSidebarOpen(open => !open)}
       />
 
       <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 53px)' }}>
-        <Sidebar activeView={activeView} setActiveView={handleSetView} />
+        {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/70 lg:hidden" />}
+        <Sidebar activeView={activeView} setActiveView={handleSetView} isOpen={sidebarOpen} />
         <main className="flex-1 overflow-y-auto bg-slate-950">
           {renderView()}
         </main>

@@ -13,7 +13,7 @@ const roleBadge = (r) => {
 };
 
 export const UserManagement = () => {
-  const { users, createUserAccount, approveUser, rejectUser, deactivateUser, reactivateUser, editUser } = useApp();
+  const { users, homeowners, createUserAccount, approveUser, rejectUser, deactivateUser, reactivateUser, editUser } = useApp();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -22,29 +22,32 @@ export const UserManagement = () => {
   const [newUserData, setNewUserData] = useState({
     fullName: '',
     email: '',
-    password: 'novalink2026',
+    password: '',
     role: 'admin',
+    homeownerId: '',
   });
 
-  const [editData, setEditData] = useState({ fullName: '', email: '', role: 'resident' });
+  const [editData, setEditData] = useState({ fullName: '', email: '', role: 'resident', homeownerId: '' });
 
-  const handleCreateSubmit = (e) => {
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (!newUserData.fullName || !newUserData.email) return;
-    createUserAccount(newUserData);
-    setNewUserData({ fullName: '', email: '', password: 'novalink2026', role: 'admin' });
-    setShowCreateModal(false);
+    const result = await createUserAccount(newUserData);
+    if (result.success) {
+      setNewUserData({ fullName: '', email: '', password: '', role: 'admin', homeownerId: '' });
+      setShowCreateModal(false);
+    }
   };
 
   const handleEditOpen = (user) => {
     setEditingUser(user);
-    setEditData({ fullName: user.fullName, email: user.email, role: user.role });
+    setEditData({ fullName: user.fullName, email: user.email, role: user.role, homeownerId: user.homeownerId || '' });
   };
 
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
-    editUser(editingUser.id, editData);
-    setEditingUser(null);
+    const result = await editUser(editingUser.id, editData);
+    if (result.success) setEditingUser(null);
   };
 
   const filtered = users.filter(u => {
@@ -176,7 +179,7 @@ export const UserManagement = () => {
               <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-blue-400" /> Create System Account
               </h3>
-              <p className="text-xs text-slate-400 mt-1">Add a new administrator, security guard, or resident account. Default password: novalink2026</p>
+              <p className="text-xs text-slate-400 mt-1">Add an administrator, security guard, or resident. The initial password must be shared privately and changed at first sign-in.</p>
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
@@ -184,7 +187,7 @@ export const UserManagement = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Account Role</label>
                 <select
                   value={newUserData.role}
-                  onChange={e => setNewUserData({ ...newUserData, role: e.target.value })}
+                  onChange={e => setNewUserData({ ...newUserData, role: e.target.value, homeownerId: e.target.value === 'resident' ? newUserData.homeownerId : '' })}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
                 >
                   <option value="admin">NHAI Administrator (Admin)</option>
@@ -192,6 +195,20 @@ export const UserManagement = () => {
                   <option value="resident">Resident Homeowner</option>
                 </select>
               </div>
+
+              {newUserData.role === 'resident' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Homeowner Record</label>
+                  <select required value={newUserData.homeownerId}
+                    onChange={e => setNewUserData({ ...newUserData, homeownerId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                    <option value="">Select an unlinked homeowner</option>
+                    {homeowners.filter(homeowner => !homeowner.userId).map(homeowner => (
+                      <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeowner.blockLot}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
@@ -220,7 +237,11 @@ export const UserManagement = () => {
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Initial Password</label>
                 <input
-                  type="text"
+                  type="password"
+                  required
+                  minLength={12}
+                  autoComplete="new-password"
+                  placeholder="At least 12 characters with a letter and number"
                   value={newUserData.password}
                   onChange={e => setNewUserData({ ...newUserData, password: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
@@ -267,7 +288,7 @@ export const UserManagement = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Role</label>
                 <select
                   value={editData.role}
-                  onChange={e => setEditData({ ...editData, role: e.target.value })}
+                  onChange={e => setEditData({ ...editData, role: e.target.value, homeownerId: e.target.value === 'resident' ? editData.homeownerId : '' })}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
                 >
                   <option value="admin">NHAI Administrator</option>
@@ -275,6 +296,18 @@ export const UserManagement = () => {
                   <option value="resident">Resident Homeowner</option>
                 </select>
               </div>
+              {editData.role === 'resident' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Homeowner Record</label>
+                  <select required value={editData.homeownerId} onChange={e => setEditData({ ...editData, homeownerId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                    <option value="">Select a homeowner</option>
+                    {homeowners.filter(homeowner => !homeowner.userId || homeowner.userId === editingUser.id).map(homeowner => (
+                      <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeowner.blockLot}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
                 <input

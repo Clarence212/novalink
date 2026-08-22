@@ -14,12 +14,14 @@ export const AnnouncementsView = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', content: '', priority: 'normal' });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() || !form.content.trim()) return;
-    addAnnouncement(form);
-    setForm({ title: '', content: '', priority: 'normal' });
-    setShowForm(false);
+    const result = await addAnnouncement(form);
+    if (result.success) {
+      setForm({ title: '', content: '', priority: 'normal' });
+      setShowForm(false);
+    }
   };
 
   return (

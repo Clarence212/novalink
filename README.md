@@ -1,121 +1,84 @@
 # NovaLink HOA Management System
 
-**System Title**: NovaLink: Web-Based HOA Management System for Novaville Homeowners Association, Inc.  
+NovaLink is the role-based HOA portal described in the project proposal and requirements documents. It supports administrators, residents, security personnel, and email-verified facility guests.
 
-**PUBLIC BETA TESTING**: [novalinkhub.tech](https://novalinkhub.tech)
+## Implemented architecture
 
-**Documentation Paper**: [novalink.dpdns.org](https://novalink.dpdns.org)
+- React 19 + Vite frontend. The browser contains presentation state only; it is not an authority for users, roles, passwords, dues, approvals, or restrictions.
+- PHP 8.0+ JSON API with server sessions, `HttpOnly`/`SameSite=Strict` cookies, CSRF protection, input validation, role and ownership checks, rate limiting, and audit logging.
+- MySQL 8 / MariaDB 10.6+ centralized relational schema with foreign keys, unique constraints, transactions, payment allocations, and private upload metadata.
+- Brevo transactional email integration. OTPs use `random_int`, are stored only as password hashes, expire after 15 minutes, and allow at most five verification attempts.
+- Apache configuration for same-origin production hosting, SPA fallback, security headers, HTTPS, and denial of internal/backend storage paths.
 
-**Deployment Target**: Production Web Server (Oracle Linux / Apache / PHP 8.x / MySQL 8.0 / React Vite Frontend)
+There are no built-in accounts or default passwords. Create the first administrator with the CLI bootstrap command in [backend/README.md](backend/README.md).
 
----
+## Modules
 
+- Account registration, email verification, administrator approval, login lockout, password reset, and forced temporary-password replacement
+- Homeowner and household-occupant master records
+- Vehicle submissions, review, sticker renewals, and server-generated sticker numbers
+- Facility configuration and conflict-safe resident/verified-guest reservations
+- Monthly dues generation, overdue penalties, partial payment allocation, proof validation, reminders, payment QR configuration, and automatic service restrictions
+- Visitor entry and exit logs for security personnel
+- Resident concerns and administrator responses
+- Announcements, delivery logs, dashboards, and audit records
 
-## 1. Architecture & System Overview
+## Local frontend development
 
-NovaLink is a production-grade web application built for the Novaville Homeowners Association, Inc. (NHAI). The system is designed to streamline community operations, gated entry visitor tracking, financial dues collection, facility reservations, vehicle sticker renewals, resident concerns, and real-time email notifications.
+The Vite development server proxies `/backend` to PHP on port 8000.
 
-```mermaid
-graph TD
-    A["Public / Unauthenticated User"] -->|Login Portal| B["Unified Login Page (LoginView)"]
-    A -->|Guest Booking| C["Guest Facility Booking (GuestModeView)"]
-    
-    B -->|Admin Role| D["Admin Dashboard (3-Column Card Grid)"]
-    B -->|Resident Role| E["Resident Dashboard (6-Card Grid)"]
-    B -->|Security Guard Role| F["Guard Visitor Logging Dashboard"]
-    
-    D --> G["Master Homeowner Records (D2)"]
-    D --> H["User Account Approvals (D1)"]
-    D --> I["Payment Validation (D5)"]
-    D --> J["Announcement Broadcast (D8)"]
-    
-    E --> K["Facility Reservation (D4)"]
-    E --> L["GCash Payment Proof Upload (D5)"]
-    E --> M["Vehicle & Sticker Renewal (D3, D9)"]
-    E --> N["Submit Resident Concern (D7)"]
-    
-    F --> O["Gate Visitor Logging & Exit (D6)"]
+```bash
+npm ci
+php -S 127.0.0.1:8000 -t .
+npm run dev
 ```
 
----
+Copy `backend/config/env.example.php` to `backend/config/env.php` and configure a local database before starting PHP. Never commit `env.php`.
 
-## 2. Production Data Stores (Schema Mapping D1-D10)
+Build the production frontend with:
 
-| Data Store | Entity | Production Function | Storage Implementation |
-| :--- | :--- | :--- | :--- |
-| **D1** | `users` | User Accounts (Admin, Resident, Security) | `users` table (`schema.sql`) / `localStorage` (`novalink_clean_production_v1`) |
-| **D2** | `homeowners` | Homeowner Master Records & Occupants | `homeowners` & `occupants` tables |
-| **D3** | `vehicles` | Resident Vehicles | `vehicles` table |
-| **D4** | `reservations` | Facility Booking Requests | `facility_reservations` table |
-| **D5** | `dues_payments` | Dues & GCash Payment Proofs | `dues_records` & `payment_proofs` tables |
-| **D6** | `visitor_logs` | Security Gate Visitor Entries | `visitor_logs` table |
-| **D7** | `concerns` | Resident Concern Tickets | `resident_concerns` table |
-| **D8** | `announcements` | Board Bulletins & News | `announcements` table |
-| **D9** | `sticker_renewals` | HOA Vehicle Sticker Requests | `sticker_renewals` table |
-| **D10** | `email_logs` | Dispatched Email Audit Records | `email_logs` table & `EmailService.php` |
-
----
-
-## 3. User Roles & Account Access
-
-| Role | Default Primary Account | Access Rights |
-| :--- | :--- | :--- |
-| **Main Administrator** | `clarence@novalinkhub.tech` | Full System Control, User Account Creation/Approvals, Homeowner Records, Dues Validation, Announcement Dispatch. |
-| **NHAI Administrator** | `admin@novalinkhub.tech` | System Administration & Records Management. |
-| **Security Officer** | `guard@novalinkhub.tech` | Gate Visitor Entry Logging, On-Site Visitor Tracking, Exit Log Recording. |
-| **Resident Homeowner** | `clarence.lagamia@gmail.com` | Facility Booking, Dues Payment Upload, Vehicle Registration, Sticker Renewal, Concern Submissions. |
-
----
-
-## 4. Email Notification Subsystem
-
-NovaLink integrates an automated HTML email notification pipeline utilizing the Brevo v3 API:
-
-1. **OTP Verification**: Dispatches 4-digit verification codes for self-registration and password resets.
-2. **Account Approval Alerts**: Notifies residents when their account registration is approved or rejected by the admin.
-3. **Announcement Broadcasts**: Automatically emails published community announcements to active residents.
-4. **Payment Receipts**: Sends validation confirmation upon proof verification by accounting.
-5. **Sticker Renewals**: Dispatches approval notices containing generated sticker serial numbers.
-6. **Guest Reservations**: Dispatches verification codes and reservation confirmations for non-resident guests.
-
----
-
-## 5. Production Deployment Instructions (Oracle Cloud / Apache)
-
-### A. Frontend Deployment (Vite / React)
 ```bash
-# Install dependencies
-npm install
-
-# Build optimized production bundle
 npm run build
 ```
-*Outputs compiled assets to `/dist` with vendor chunk splitting (`vendor.js` & `icons.js`).*
 
-### B. Backend API & Database Setup (PHP / MariaDB)
-1. Install Apache, PHP, and MariaDB on the target server.
-2. Import `backend/schema.sql` into the MariaDB server.
-3. Create a `backend/config/env.php` file on the server and configure the `DB_PASS`, `SYSTEM_EMAIL`, and `BREVO_API_KEY` credentials (do not commit this file to version control).
-4. Deploy the contents of the `/dist` folder and the `/backend` folder to the web root (`/var/www/html/`).
-5. Configure the Apache VirtualHost and an `.htaccess` file to rewrite non-API requests to `index.html`.
+## Database setup
 
----
+Create an empty database with `utf8mb4`, then import the schema into that selected database:
 
-## 6. Quality Assurance & Verification Checklist
+```bash
+mysql -u root -p -e "CREATE DATABASE novalink_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -u root -p novalink_db < backend/schema.sql
+```
 
-- [x] **Direct Entry Portal**: Unauthenticated access lands directly on `LoginView.jsx`.
-- [x] **Secure API Credentials**: Brevo API keys and database credentials extracted to `env.php` and ignored by Git.
-- [x] **Live Email Dispatch**: PHP cURL integration with Brevo REST API verified.
-- [x] **Account Name Displays**: Dynamic header greetings match logged-in account names.
-- [x] **Persistent Storage**: Automatic client storage sync (`novalink_clean_production_v1`).
-- [x] **Vite Bundle Optimization**: Clean build verification (`npm run build`).
+For an installation that used the former beta schema, do not import the new schema over the old tables. Use the side-by-side, backup-first migration in `backend/migrations/upgrade_beta_to_v2.sh` and review its stated legacy-data limitations.
 
----
+## Oracle Linux 9 production outline
 
-## 7. CI/CD Pipeline (GitHub Actions)
+1. Install Apache, TLS support, PHP 8.0+, required PHP extensions, and MySQL/MariaDB. Enable `httpd`, `php-fpm`, and the database service.
+2. Create `/var/www/novalink/{releases,shared/backend/config,shared/backend/storage}` and grant the deployment user ownership of `/var/www/novalink`.
+3. Put the uncommitted production configuration at `/var/www/novalink/shared/backend/config/env.php` with mode `0640` and an appropriate service group.
+4. Install `deploy/apache/novalink.conf` under `/etc/httpd/conf.d/`, provision the referenced TLS certificate, run `apachectl configtest`, and reload Apache.
+5. Apply SELinux labels: content is `httpd_sys_content_t`; only `/var/www/novalink/shared/backend/storage` is `httpd_sys_rw_content_t`. Enable the narrowly required Apache database/network booleans for MySQL and Brevo.
+6. Import `backend/schema.sql`, create the first administrator, and schedule `backend/scripts/maintenance.php --generate-dues` once daily.
+7. Configure the GitHub environment secrets listed below and trigger the deployment workflow.
 
-NovaLink uses GitHub Actions to automatically build and deploy to the Oracle server:
-1. Pushing to the `main` branch triggers the `.github/workflows/deploy.yml` workflow.
-2. The runner executes `npm install` and `npm run build`.
-3. The runner securely SCP/rsyncs the `dist/` and `backend/` folders to `/var/www/html/novalink/` on the Oracle server.
-4. *Note: `backend/config/env.php` is explicitly excluded to preserve live database credentials.*
+The production workflow publishes only compiled frontend files and the required backend runtime. It uses immutable release directories, persistent symlinks for `env.php` and uploads, an atomic `current` symlink switch, pinned SSH host keys, and a post-deployment health check.
+
+Required GitHub environment secrets:
+
+- `ORACLE_HOST`
+- `ORACLE_USER`
+- `ORACLE_SSH_KEY`
+- `ORACLE_KNOWN_HOSTS` — the pre-verified complete `known_hosts` line, not a runtime `ssh-keyscan`
+
+## Production verification
+
+```bash
+apachectl configtest
+curl --fail https://novalinkhub.tech/backend/api/health.php
+curl -I https://novalinkhub.tech/
+```
+
+Then test every role using non-production sample accounts: failed-login lockout, resident registration matching, admin approval, guest OTP, overlapping reservation rejection, payment proof authorization, partial/full allocation, overdue restriction/lifting, visitor exit, concern response, announcement delivery status, and first-login password replacement.
+
+See [backend/README.md](backend/README.md) for endpoint, cron, backup, and account-bootstrap details.
