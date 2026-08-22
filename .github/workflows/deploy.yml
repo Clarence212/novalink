@@ -68,36 +68,20 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
-      - name: Upload immutable release archive
+      - name: Deploy to server
         env:
           ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
           ORACLE_USER: ${{ secrets.ORACLE_USER }}
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/id_ed25519 novalink-release.tgz "$ORACLE_USER@$ORACLE_HOST:/tmp/novalink-$GITHUB_SHA.tgz"
-
-      - name: Activate release atomically
-        env:
-          ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
-          ORACLE_USER: ${{ secrets.ORACLE_USER }}
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 "$ORACLE_USER@$ORACLE_HOST" \
-            "NOVALINK_RELEASE='$GITHUB_SHA' bash -s" <<'REMOTE'
+          scp -i ~/.ssh/id_ed25519 novalink-release.tgz "$ORACLE_USER@$ORACLE_HOST:/tmp/novalink-release.tgz"
+          ssh -i ~/.ssh/id_ed25519 "$ORACLE_USER@$ORACLE_HOST" bash -s <<'REMOTE'
           set -euo pipefail
           app_root=/var/www/html/novalink
-          release_dir="$app_root/releases/$NOVALINK_RELEASE"
-          archive="/tmp/novalink-$NOVALINK_RELEASE.tgz"
-          test -f "$app_root/shared/backend/config/env.php"
-          test ! -e "$release_dir"
-          install -d -m 0755 "$release_dir/backend/config"
-          install -d -m 0750 "$app_root/shared/backend/storage/payment-proofs"
-          tar -xzf "$archive" -C "$release_dir"
-          ln -s "$app_root/shared/backend/config/env.php" "$release_dir/backend/config/env.php"
-          ln -s "$app_root/shared/backend/storage" "$release_dir/backend/storage"
-          ln -sfn "$release_dir" "$app_root/current.next"
-          mv -Tf "$app_root/current.next" "$app_root/current"
+          archive=/tmp/novalink-release.tgz
+          tar -xzf "$archive" -C "$app_root"
           rm -f "$archive"
+          echo "Deploy complete."
           REMOTE
 
       - name: Verify production health
