@@ -13,7 +13,7 @@
 
 ## 1. Architecture & System Overview
 
-NovaLink is a production-grade web application built for the Novaville Homeowners Association, Inc. (NHAI). The system is designed to streamline community operations, gated entry visitor tracking, financial dues collection, facility reservations, vehicle sticker renewals, resident concerns, and real-time email notifications.
+NovaLink is a production-grade web application built for the Novaville Homeowners Association, Inc. (NHAI). The system is designed to streamline community operations, gated entry visitor tracking, financial dues collection, facility reservations, vehicle sticker renewals process, resident concerns, and real-time email notifications.
 
 ```mermaid
 graph TD
