@@ -85,7 +85,7 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$ORACLE_USER@$ORACLE_HOST" \
             "NOVALINK_RELEASE='$GITHUB_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
-          app_root=/var/www/novalink
+          app_root=/var/www/html/novalink
           release_dir="$app_root/releases/$NOVALINK_RELEASE"
           archive="/tmp/novalink-$NOVALINK_RELEASE.tgz"
           test -f "$app_root/shared/backend/config/env.php"
