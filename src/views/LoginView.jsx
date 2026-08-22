@@ -127,10 +127,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
           { }
           <div class="relative z-10 space-y-6">
-            <div class="w-20 h-20 bg-white/95 rounded-2xl shadow-lg flex items-center justify-center mb-6">
-              <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center font-extrabold text-white text-2xl shadow-inner">
-                N
-              </div>
+            <div className="w-20 h-20 bg-white rounded-2xl shadow-xl flex items-center justify-center mb-6 p-2 overflow-hidden border border-white/20">
+              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-full h-full object-contain drop-shadow-sm" />
             </div>
 
             <div>
