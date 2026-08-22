@@ -9,7 +9,6 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
 
   const [activeModal, setActiveModal] = useState(null);
@@ -29,10 +28,11 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [forgotStep, setForgotStep] = useState(1);
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [resetVerificationToken, setResetVerificationToken] = useState('');
 
-  const handleSignIn = (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
-    const result = login(email, password);
+    const result = await login(email, password);
     if (!result.success) {
       showToast(result.message, 'warning');
       return;
@@ -61,9 +61,12 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const handleRegisterVerify = async (e) => {
     e.preventDefault();
     try {
-      await apiVerifyOtp(regData.email, regOtp, 'registration');
-
-      createUserAccount({ ...regData, role: 'resident', status: 'pending', emailVerified: true });
+      const verification = await apiVerifyOtp(regData.email, regOtp, 'registration');
+      const result = await createUserAccount(
+        { ...regData, role: 'resident' },
+        verification.verificationToken,
+      );
+      if (!result.success) throw new Error(result.message || 'Registration failed.');
       showToast('Email verified successfully! Your account is pending NHAI Admin approval.', 'success');
       setActiveModal(null);
       setRegStep(1);
@@ -88,7 +91,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const handleResetVerifyOtp = async (e) => {
     e.preventDefault();
     try {
-      await apiVerifyOtp(forgotEmail, forgotOtp, 'reset');
+      const verification = await apiVerifyOtp(forgotEmail, forgotOtp, 'reset');
+      setResetVerificationToken(verification.verificationToken);
       setForgotStep(3);
     } catch (error) {
       showToast(error.message || 'Invalid verification code.', 'warning');
@@ -97,11 +101,11 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 8) {
-      showToast('Password must be at least 8 characters.', 'warning');
+    if (newPassword.length < 12) {
+      showToast('Password must be at least 12 characters and include a letter and number.', 'warning');
       return;
     }
-    const result = updatePassword(forgotEmail, newPassword);
+    const result = await updatePassword(forgotEmail, newPassword, resetVerificationToken);
     if (!result.success) {
       showToast(result.message, 'warning');
       return;
@@ -112,21 +116,22 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     setForgotEmail('');
     setForgotOtp('');
     setNewPassword('');
+    setResetVerificationToken('');
   };
 
   return (
-    <div class="min-h-screen flex items-center justify-center px-4 py-8 bg-slate-900">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-slate-900">
       { }
-      <div class="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px] border border-slate-200/50">
+      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px] border border-slate-200/50">
 
         { }
-        <div class="md:col-span-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-8 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden">
+        <div className="md:col-span-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-8 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden">
           { }
-          <div class="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-          <div class="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-blue-400/20 blur-3xl pointer-events-none"></div>
+          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-blue-400/20 blur-3xl pointer-events-none"></div>
 
           { }
-          <div class="relative z-10 space-y-6">
+          <div className="relative z-10 space-y-6">
             <div className="mb-6">
               <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-36 h-36 lg:w-40 lg:h-40 object-contain drop-shadow-xl" />
             </div>
@@ -138,112 +143,103 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           </div>
 
           { }
-          <div class="relative z-10 space-y-6 my-8">
-            <div class="flex items-start gap-4">
-              <div class="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
-                <Users class="w-6 h-6 text-white" />
+          <div className="relative z-10 space-y-6 my-8">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
+                <Users className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 class="font-bold text-white text-base">Community Management</h3>
-                <p class="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
+                <h3 className="font-bold text-white text-base">Community Management</h3>
+                <p className="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
                   Manage residents, facilities, and community events all in one place
                 </p>
               </div>
             </div>
 
-            <div class="flex items-start gap-4">
-              <div class="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
-                <ShieldCheck class="w-6 h-6 text-white" />
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
+                <ShieldCheck className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 class="font-bold text-white text-base">Secure & Reliable</h3>
-                <p class="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
+                <h3 className="font-bold text-white text-base">Secure & Reliable</h3>
+                <p className="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
                   Your data is protected with enterprise-grade security
                 </p>
               </div>
             </div>
 
-            <div class="flex items-start gap-4">
-              <div class="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
-                <Bell class="w-6 h-6 text-white" />
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
+                <Bell className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 class="font-bold text-white text-base">Stay Connected</h3>
-                <p class="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
+                <h3 className="font-bold text-white text-base">Stay Connected</h3>
+                <p className="text-blue-100/90 text-xs mt-0.5 leading-relaxed">
                   Real-time notifications and updates for your community
                 </p>
               </div>
             </div>
           </div>
 
-          <div class="relative z-10 text-xs text-blue-200/80 font-medium">
+          <div className="relative z-10 text-xs text-blue-200/80 font-medium">
             Novaville Homeowners Association, Inc. © 2026
           </div>
         </div>
 
         { }
-        <div class="md:col-span-6 p-8 lg:p-12 bg-white flex flex-col justify-between text-slate-800">
+        <div className="md:col-span-6 p-8 lg:p-12 bg-white flex flex-col justify-between text-slate-800">
           <div>
             { }
-            <div class="mb-8">
-              <h2 class="text-2xl lg:text-3xl font-bold text-slate-900">Welcome Back</h2>
-              <p class="text-slate-500 text-xs mt-1">Sign in to continue to your dashboard</p>
+            <div className="mb-8">
+              <h2 className="text-2xl lg:text-3xl font-bold text-slate-900">Welcome Back</h2>
+              <p className="text-slate-500 text-xs mt-1">Sign in to continue to your dashboard</p>
             </div>
 
             { }
-            <form onSubmit={handleSignIn} class="space-y-4">
+            <form onSubmit={handleSignIn} className="space-y-4">
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
-                <div class="relative">
-                  <Mail class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     required
                     placeholder="your.email@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                 </div>
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
-                <div class="relative">
-                  <Lock class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
-                    {showPassword ? <EyeOff class="w-4 h-4" /> : <Eye class="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
               { }
-              <div class="flex items-center justify-between text-xs pt-1">
-                <label class="flex items-center gap-2 text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                  />
-                  <span>Remember me</span>
-                </label>
+              <div className="flex items-center justify-end text-xs pt-1">
                 <button
                   type="button"
                   onClick={() => setActiveModal('forgot')}
-                  class="text-blue-600 hover:text-blue-700 font-semibold text-xs transition"
+                  className="text-blue-600 hover:text-blue-700 font-semibold text-xs transition"
                 >
                   Forgot password?
                 </button>
@@ -252,36 +248,35 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               { }
               <button
                 type="submit"
-                onClick={handleSignIn}
-                class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition transform active:scale-[0.99] mt-2"
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition transform active:scale-[0.99] mt-2"
               >
                 Sign In
               </button>
             </form>
 
             { }
-            <div class="text-center text-xs text-slate-600 my-5">
+            <div className="text-center text-xs text-slate-600 my-5">
               Don't have an account?{' '}
               <button
                 onClick={() => setActiveModal('register')}
-                class="text-blue-600 hover:text-blue-700 font-bold underline underline-offset-2 transition"
+                className="text-blue-600 hover:text-blue-700 font-bold underline underline-offset-2 transition"
               >
                 Register as Resident
               </button>
             </div>
 
             {/* Divider */}
-            <div class="relative flex items-center justify-center my-4">
-              <div class="border-t border-slate-200 w-full"></div>
-              <span class="bg-white px-3 text-[11px] text-slate-400 uppercase font-medium absolute">or</span>
+            <div className="relative flex items-center justify-center my-4">
+              <div className="border-t border-slate-200 w-full"></div>
+              <span className="bg-white px-3 text-[11px] text-slate-400 uppercase font-medium absolute">or</span>
             </div>
 
             {/* Guest mode button */}
             <button
               onClick={handleGuestAccess}
-              class="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/50 hover:bg-blue-50/50 text-slate-700 hover:text-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition"
+              className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/50 hover:bg-blue-50/50 text-slate-700 hover:text-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition"
             >
-              <UserCheck class="w-4 h-4 text-blue-600" />
+              <UserCheck className="w-4 h-4 text-blue-600" />
               <span>Continue as Guest (Facility Reservation Only)</span>
             </button>
           </div>
@@ -291,88 +286,96 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       {/* REGISTRATION MODAL */}
       {activeModal === 'register' && (
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
-            <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 class="text-lg font-bold text-slate-900">Resident Account Registration</h3>
-              <button onClick={() => setActiveModal(null)} class="text-slate-400 hover:text-slate-600">
-                <X class="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Resident Account Registration</h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {regStep === 1 ? (
-              <form onSubmit={handleRegisterOtpSend} class="space-y-3 text-xs">
+              <form onSubmit={handleRegisterOtpSend} className="space-y-3 text-xs">
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Full Name</label>
+                  <label className="block font-medium text-slate-700 mb-1">Full Name</label>
                   <input
                     type="text"
                     required
                     placeholder="Enter your full name"
                     value={regData.fullName}
                     onChange={(e) => setRegData({ ...regData, fullName: e.target.value })}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Email Address</label>
+                  <label className="block font-medium text-slate-700 mb-1">Email Address</label>
                   <input
                     type="email"
                     required
                     placeholder="Enter your email address"
                     value={regData.email}
                     onChange={(e) => setRegData({ ...regData, email: e.target.value })}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Block & Lot Address</label>
+                  <label className="block font-medium text-slate-700 mb-1">Block & Lot Address</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Block 1, Lot 5"
                     value={regData.blockLot}
                     onChange={(e) => setRegData({ ...regData, blockLot: e.target.value })}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Password</label>
+                  <label className="block font-medium text-slate-700 mb-1">Password</label>
                   <input
                     type="password"
                     required
+                    minLength={12}
+                    maxLength={128}
+                    pattern="(?=.*[A-Za-z])(?=.*\d).{12,128}"
+                    title="Use 12–128 characters with at least one letter and one number."
                     placeholder="••••••••"
                     value={regData.password}
                     onChange={(e) => setRegData({ ...regData, password: e.target.value })}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
-                  class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
                   Send OTP Email Verification Code
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleRegisterVerify} class="space-y-3 text-xs">
-                <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
-                  <Mail class="w-4 h-4 shrink-0 text-blue-600" />
+              <form onSubmit={handleRegisterVerify} className="space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
+                  <Mail className="w-4 h-4 shrink-0 text-blue-600" />
                   <span>Verification code sent to <strong>{regData.email}</strong>. Please check your inbox.</span>
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
+                  <label className="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
                   <input
                     type="text"
                     required
-                    placeholder="OTP"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    minLength={6}
+                    maxLength={6}
+                    placeholder="6-digit code"
                     value={regOtp}
                     onChange={(e) => setRegOtp(e.target.value)}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
-                  class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
                   Verify & Submit Registration
                 </button>
@@ -384,33 +387,33 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       {/* FORGOT PASSWORD MODAL */}
       {activeModal === 'forgot' && (
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
-            <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 class="text-lg font-bold text-slate-900">Reset Account Password</h3>
-              <button onClick={() => { setActiveModal(null); setForgotStep(1); setForgotEmail(''); setForgotOtp(''); setNewPassword(''); }} class="text-slate-400 hover:text-slate-600">
-                <X class="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Reset Account Password</h3>
+              <button onClick={() => { setActiveModal(null); setForgotStep(1); setForgotEmail(''); setForgotOtp(''); setNewPassword(''); setResetVerificationToken(''); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* step 1: enter email */}
             {forgotStep === 1 && (
-              <form onSubmit={handleForgotSend} class="space-y-3 text-xs">
-                <p class="text-slate-500">Enter your registered email address and we will send you a verification code.</p>
+              <form onSubmit={handleForgotSend} className="space-y-3 text-xs">
+                <p className="text-slate-500">Enter your registered email address and we will send you a verification code.</p>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Registered Account Email</label>
+                  <label className="block font-medium text-slate-700 mb-1">Registered Account Email</label>
                   <input
                     type="email"
                     required
                     placeholder="Enter registered email..."
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
-                  class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
                   Send Reset Code
                 </button>
@@ -419,25 +422,29 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
             {/* step 2: verify OTP */}
             {forgotStep === 2 && (
-              <form onSubmit={handleResetVerifyOtp} class="space-y-3 text-xs">
-                <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
-                  <Mail class="w-4 h-4 shrink-0 text-blue-600" />
+              <form onSubmit={handleResetVerifyOtp} className="space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
+                  <Mail className="w-4 h-4 shrink-0 text-blue-600" />
                   <span>Verification code sent to <strong>{forgotEmail}</strong>. Check your inbox.</span>
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
+                  <label className="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
                   <input
                     type="text"
                     required
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    minLength={6}
+                    maxLength={6}
                     placeholder="Enter the code from your email"
                     value={forgotOtp}
                     onChange={(e) => setForgotOtp(e.target.value)}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
-                  class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
                   Verify Code
                 </button>
@@ -446,24 +453,28 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
             {/* step 3: enter new password */}
             {forgotStep === 3 && (
-              <form onSubmit={handleResetPassword} class="space-y-3 text-xs">
-                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+              <form onSubmit={handleResetPassword} className="space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
                   Identity verified. Enter your new password below.
                 </div>
                 <div>
-                  <label class="block font-medium text-slate-700 mb-1">New Password</label>
+                  <label className="block font-medium text-slate-700 mb-1">New Password</label>
                   <input
                     type="password"
                     required
+                    minLength={12}
+                    maxLength={128}
+                    pattern="(?=.*[A-Za-z])(?=.*\d).{12,128}"
+                    title="Use 12–128 characters with at least one letter and one number."
                     placeholder="At least 8 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    class="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
                 <button
                   type="submit"
-                  class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
                   Save New Password
                 </button>
