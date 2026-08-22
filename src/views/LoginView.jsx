@@ -128,7 +128,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           { }
           <div class="relative z-10 space-y-6">
             <div className="mb-6">
-              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-24 h-24 object-contain drop-shadow-md" />
+              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-36 h-36 lg:w-40 lg:h-40 object-contain drop-shadow-xl" />
             </div>
 
             <div>
