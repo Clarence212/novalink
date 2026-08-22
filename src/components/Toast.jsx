@@ -13,14 +13,14 @@ export const Toast = () => {
   };
 
   const icons = {
-    success: <CheckCircle2 class="w-4 h-4 shrink-0" />,
-    warning: <AlertCircle class="w-4 h-4 shrink-0" />,
-    info: <Info class="w-4 h-4 shrink-0" />
+    success: <CheckCircle2 className="w-4 h-4 shrink-0" />,
+    warning: <AlertCircle className="w-4 h-4 shrink-0" />,
+    info: <Info className="w-4 h-4 shrink-0" />
   };
 
   return (
-    <div class="fixed top-5 right-5 z-50 animate-bounce">
-      <div class={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-xs font-semibold ${bgColors[toast.type] || bgColors.info}`}>
+    <div className="fixed top-5 right-5 z-50 animate-bounce">
+      <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-xs font-semibold ${bgColors[toast.type] || bgColors.info}`}>
         {icons[toast.type]}
         <span>{toast.message}</span>
       </div>

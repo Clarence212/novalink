@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Calendar, Mail, X, CheckCircle } from 'lucide-react';
-import { apiSendOtp, apiVerifyOtp, apiSendNotification } from '../services/api';
+import { Mail, CheckCircle } from 'lucide-react';
+import { apiSendOtp, apiVerifyOtp } from '../services/api';
 
 export const GuestModeView = () => {
-  const { facilities, reservations, addReservation, sendSimulatedEmail, showToast, setIsGuestMode } = useApp();
+  const { facilities, addReservation, showToast, setIsGuestMode } = useApp();
 
   const [step, setStep] = useState(1); 
   const [guestInfo, setGuestInfo] = useState({ fullName: '', email: '', contactNumber: '' });
@@ -15,12 +15,26 @@ export const GuestModeView = () => {
   const guestFacilities = facilities.filter(f => f.isActive && f.guestBookable);
   const timeSlots = ['8:00 AM - 12:00 PM', '12:00 PM - 4:00 PM', '4:00 PM - 8:00 PM', '9:00 AM - 1:00 PM', '1:00 PM - 5:00 PM'];
 
+  useEffect(() => {
+    if (guestFacilities.length > 0 && !guestFacilities.some(facility => facility.id === form.facilityId)) {
+      setForm(previous => ({ ...previous, facilityId: guestFacilities[0].id }));
+    }
+  }, [facilities, form.facilityId]);
+
   const handleSendOtp = async (e) => {
     e.preventDefault();
-    sendSimulatedEmail(guestInfo.email, 'NovaLink Guest Verification Code', 'Your verification code is: 5566');
-    apiSendOtp(guestInfo.email, guestInfo.fullName || 'Guest', 'guest').catch(() => {});
-    showToast('Verification code sent to your email address.', 'info');
-    setStep(2);
+    try {
+      await apiSendOtp(
+        guestInfo.email,
+        guestInfo.fullName || 'Guest',
+        'guest',
+        guestInfo.contactNumber,
+      );
+      showToast('Verification code sent to your email address.', 'info');
+      setStep(2);
+    } catch (error) {
+      showToast(error.message || 'Verification code could not be sent.', 'warning');
+    }
   };
 
   const handleVerifyOtp = async (e) => {
@@ -33,28 +47,15 @@ export const GuestModeView = () => {
     }
   };
 
-  const handleSubmitReservation = (e) => {
+  const handleSubmitReservation = async (e) => {
     e.preventDefault();
-    addReservation({
+    const result = await addReservation({
       facilityId: form.facilityId,
-      homeownerId: null,
-      guestId: `g_${Date.now()}`,
-      requesterType: 'guest',
-      requesterName: guestInfo.fullName,
       date: form.date,
       timeSlot: form.timeSlot,
       purpose: form.purpose,
     });
-    
-    
-    apiSendNotification(
-      guestInfo.email,
-      guestInfo.fullName,
-      'Reservation Request Received - NovaLink',
-      `Hi ${guestInfo.fullName}, your facility reservation request has been received and is pending NHAI administrator approval. We will notify you of the status.`
-    ).catch(() => {});
-    
-    setSubmitted(true);
+    if (result.success) setSubmitted(true);
   };
 
   return (
@@ -114,8 +115,8 @@ export const GuestModeView = () => {
               <span>Verification code sent to <strong>{guestInfo.email}</strong>. Please check your inbox.</span>
             </div>
             <form onSubmit={handleVerifyOtp} className="space-y-3">
-              <input type="text" required value={otp} onChange={e => setOtp(e.target.value)}
-                placeholder="Enter 4-digit code" className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-sm text-center font-bold text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500" />
+              <input type="text" required inputMode="numeric" pattern="\d{6}" minLength={6} maxLength={6} value={otp} onChange={e => setOtp(e.target.value)}
+                placeholder="Enter 6-digit code" className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-sm text-center font-bold text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500" />
               <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">Verify & Continue</button>
               <button type="button" onClick={() => setStep(1)} className="w-full py-2 text-xs text-slate-500 hover:text-slate-300 transition">Back</button>
             </form>
@@ -130,7 +131,7 @@ export const GuestModeView = () => {
             <form onSubmit={handleSubmitReservation} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">Facility</label>
-                <select value={form.facilityId} onChange={e => setForm({ ...form, facilityId: e.target.value })}
+                <select required value={form.facilityId} onChange={e => setForm({ ...form, facilityId: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
                   {guestFacilities.map(f => <option key={f.id} value={f.id}>{f.name} · {f.rate}</option>)}
                 </select>

@@ -1,93 +1,81 @@
 <?php
+declare(strict_types=1);
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../lib/bootstrap.php';
 require_once __DIR__ . '/../services/EmailService.php';
 
-$input = json_decode(file_get_contents('php://input'), true);
-
-$email = filter_var($input['email'] ?? '', FILTER_VALIDATE_EMAIL);
-$name = trim($input['name'] ?? 'User');
-$type = $input['type'] ?? 'registration'; 
-
-if (!$email) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Valid email address is required.']);
-    exit;
-}
-
 try {
-    $pdo = getDbConnection();
-    $emailService = new EmailService();
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        json_response(['error' => 'Method not allowed.'], 405);
+    }
+    require_csrf();
+    $pdo = requireDbConnection();
+    $input = json_input();
+    $email = normalize_email($input['email'] ?? '');
+    $type = require_choice($input, 'type', ['registration', 'reset', 'guest']);
+    $purpose = $type === 'reset' ? 'password_reset' : $type;
+    $name = trim((string) ($input['name'] ?? 'User'));
+    $contactNumber = trim((string) ($input['contactNumber'] ?? ''));
+    if ($name === '' || mb_strlen($name) > 120) {
+        $name = 'User';
+    }
+    if (mb_strlen($contactNumber) > 30) {
+        json_response(['error' => 'Contact number is too long.'], 422);
+    }
+    if ($purpose === 'guest') {
+        $name = required_string($input, 'name', 120, 'Full name');
+        $contactNumber = required_string($input, 'contactNumber', 30, 'Contact number');
+    }
 
-    
-    $otpCode = sprintf('%06d', mt_rand(0, 999999));
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-    $id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-        mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-        mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-        mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-    );
+    enforce_rate_limit($pdo, 'otp-send-' . $purpose, $email, 3, 900, 1800);
 
-    if ($pdo) {
-        if ($type === 'guest') {
-            $stmt = $pdo->prepare("
-                INSERT INTO guest_email_verifications (guest_verification_id, guest_email, guest_name, otp_code, expires_at)
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
-            $purpose = 'Guest Facility Reservation';
-        } else {
-            $stmt = $pdo->prepare("SELECT user_id FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
-
-            if ($user) {
-                $userId = $user['user_id'];
-                $stmt = $pdo->prepare("
-                    INSERT INTO account_email_verifications (verification_id, user_id, otp_code, token_hash, expires_at)
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$id, $userId, $otpCode, password_hash($otpCode, PASSWORD_BCRYPT), $expiresAt]);
-                $purpose = 'Account Registration Verification';
-            } else {
-                // If user doesn't exist, we must use the guest table because account_email_verifications
-                // requires a valid user_id foreign key and doesn't store the email address directly.
-                $stmt = $pdo->prepare("
-                    INSERT INTO guest_email_verifications (guest_verification_id, guest_email, guest_name, otp_code, expires_at)
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$id, $email, $name, $otpCode, $expiresAt]);
-                $purpose = 'Account Registration Verification';
-            }
+    if ($purpose === 'registration') {
+        $check = $pdo->prepare('SELECT user_id FROM users WHERE email = ? LIMIT 1');
+        $check->execute([$email]);
+        if ($check->fetch()) {
+            json_response(['error' => 'An account already exists for this email address.'], 409);
         }
-    } else {
-        
-        $purpose = ($type === 'guest') ? 'Guest Facility Reservation' : 'Account Registration Verification';
     }
 
-    
-    $res = $emailService->sendOtpEmail($email, $name, $otpCode, $purpose);
+    if ($purpose === 'password_reset') {
+        $check = $pdo->prepare("SELECT user_id, full_name FROM users WHERE email = ? AND account_status <> 'rejected' LIMIT 1");
+        $check->execute([$email]);
+        $user = $check->fetch();
+        if (!$user) {
+            // Do not disclose whether an account exists.
+            json_response(['success' => true, 'message' => 'If the address is registered, a verification code will be sent.']);
+        }
+        $name = $user['full_name'];
+    }
 
-    echo json_encode([
-        'success' => true,
-        'message' => 'Verification OTP code dispatched successfully.',
-        'expires_at' => $expiresAt,
+    $code = (string) random_int(100000, 999999);
+    $tokenId = uuid_v4();
+    $statement = $pdo->prepare(
+        'INSERT INTO email_verification_tokens
+         (token_id, email, full_name, contact_number, purpose, code_hash, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))'
+    );
+    $statement->execute([
+        $tokenId,
+        $email,
+        $name,
+        $contactNumber !== '' ? $contactNumber : null,
+        $purpose,
+        password_hash($code, PASSWORD_DEFAULT),
     ]);
-} catch (Throwable $e) {
-    if (!headers_sent()) {
-        http_response_code(500);
+
+    $label = match ($purpose) {
+        'password_reset' => 'Password Reset',
+        'guest' => 'Guest Facility Reservation',
+        default => 'Resident Registration',
+    };
+    $result = (new EmailService($pdo))->sendOtpEmail($email, $name, $code, $label);
+    if (!$result['success']) {
+        json_response(['error' => 'Verification email could not be delivered. Please try again later.'], 502);
     }
-    $errorMsg = 'Failed to process OTP request: ' . $e->getMessage() . ' on line ' . $e->getLine() . ' in ' . $e->getFile();
-    $json = json_encode(['error' => $errorMsg]);
-    echo $json ?: '{"error": "Failed to encode error message"}';
+
+    audit_log($pdo, null, 'otp.request', 'email_verification_token', $tokenId, null, ['purpose' => $purpose, 'email' => $email]);
+    json_response(['success' => true, 'message' => 'Verification code sent.']);
+} catch (Throwable $error) {
+    api_exception($error);
 }

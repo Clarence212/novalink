@@ -40,7 +40,7 @@ const residentNav = [
   { id: 'stickers', label: 'Sticker Renewals', icon: ClipboardList },
 ];
 
-export const Sidebar = ({ activeView, setActiveView }) => {
+export const Sidebar = ({ activeView, setActiveView, isOpen = false }) => {
   const { currentUser, isGuestMode, isRestricted } = useApp();
 
   let navItems = [];
@@ -55,7 +55,7 @@ export const Sidebar = ({ activeView, setActiveView }) => {
   }
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-y-auto">
+    <aside className={`fixed inset-y-0 left-0 z-50 lg:static w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-y-auto transition-transform duration-200 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
       {}
       <div className="px-5 py-4 border-b border-slate-800">
         <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">

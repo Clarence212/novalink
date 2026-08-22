@@ -7,3 +7,5 @@ dist
 *.log
 
 backend/config/env.php
+backend/backups/
+backend/storage/payment-proofs/*
