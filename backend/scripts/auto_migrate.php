@@ -360,7 +360,7 @@ try {
         ON DUPLICATE KEY UPDATE setting_value = setting_value;
     ");
 
-    // Helper to safely rename or add column
+    // Helper to safely add/copy column using ADD + UPDATE (100% InnoDB FK safe)
     $migrateColumn = function (PDO $pdo, string $table, string $oldColumn, string $newColumn, string $definition) {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
@@ -374,12 +374,12 @@ try {
         $hasNew = ((int) $stmt->fetchColumn()) > 0;
 
         if (!$hasNew) {
+            $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$newColumn}` {$definition}");
+            
             $stmt->execute([$table, $oldColumn]);
             $hasOld = ((int) $stmt->fetchColumn()) > 0;
             if ($hasOld) {
-                $pdo->exec("ALTER TABLE `{$table}` CHANGE COLUMN `{$oldColumn}` `{$newColumn}` {$definition}");
-            } else {
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$newColumn}` {$definition}");
+                $pdo->exec("UPDATE `{$table}` SET `{$newColumn}` = `{$oldColumn}` WHERE `{$newColumn}` IS NULL OR `{$newColumn}` = ''");
             }
         }
     };
@@ -399,7 +399,7 @@ try {
         }
     };
 
-    // 2. Perform safe column migrations/renames for legacy v1 tables
+    // 2. Perform safe column additions & copies for legacy v1 tables
     // Users table
     $addColumn($pdo, 'users', 'approved_by_user_id', 'CHAR(36) NULL');
     $addColumn($pdo, 'users', 'approved_at', 'DATETIME NULL');
@@ -409,18 +409,18 @@ try {
     $addColumn($pdo, 'users', 'last_login_at', 'DATETIME NULL');
 
     // Announcements
-    $migrateColumn($pdo, 'announcements', 'posted_by', 'posted_by_user_id', 'CHAR(36) NOT NULL');
+    $migrateColumn($pdo, 'announcements', 'posted_by', 'posted_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'announcements', 'date_posted', 'published_at', 'DATETIME NULL');
 
     // Visitor logs
-    $migrateColumn($pdo, 'visitor_logs', 'recorded_by', 'recorded_by_user_id', 'CHAR(36) NOT NULL');
+    $migrateColumn($pdo, 'visitor_logs', 'recorded_by', 'recorded_by_user_id', 'CHAR(36) NULL');
 
     // Concerns
-    $migrateColumn($pdo, 'concerns', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NOT NULL');
+    $migrateColumn($pdo, 'concerns', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'concerns', 'responded_by', 'responded_by_user_id', 'CHAR(36) NULL');
 
     // Facilities
-    $migrateColumn($pdo, 'facilities', 'rate', 'rate_label', 'VARCHAR(100) NOT NULL DEFAULT ""');
+    $migrateColumn($pdo, 'facilities', 'rate', 'rate_label', 'VARCHAR(100) NULL');
     $addColumn($pdo, 'facilities', 'guest_bookable', 'TINYINT(1) NOT NULL DEFAULT 1');
 
     // Facility Reservations
@@ -448,8 +448,8 @@ try {
     $addColumn($pdo, 'payments', 'proof_file_size', 'INT UNSIGNED NOT NULL DEFAULT 0');
 
     // Notifications
-    $migrateColumn($pdo, 'notifications', 'email_type', 'notification_type', 'VARCHAR(60) NOT NULL');
-    $migrateColumn($pdo, 'notifications', 'body_text', 'message_text', 'TEXT NOT NULL');
+    $migrateColumn($pdo, 'notifications', 'email_type', 'notification_type', 'VARCHAR(60) NULL');
+    $migrateColumn($pdo, 'notifications', 'body_text', 'message_text', 'TEXT NULL');
     $migrateColumn($pdo, 'notifications', 'status', 'delivery_status', "ENUM('queued', 'sent', 'failed') NOT NULL DEFAULT 'queued'");
 
     $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
