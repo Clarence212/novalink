@@ -81,6 +81,7 @@ jobs:
           archive=/tmp/novalink-release.tgz
           tar -xzf "$archive" -C "$app_root"
           rm -f "$archive"
+          php "$app_root/backend/scripts/auto_migrate.php"
           echo "Deploy complete."
           REMOTE
 
