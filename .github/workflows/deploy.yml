@@ -1,9 +1,14 @@
-name: Deploy to Oracle Server
+name: Deploy NovaLink
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: novalink-production
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
@@ -11,32 +16,87 @@ jobs:
     environment:
       name: production
       url: https://novalinkhub.tech
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout Code
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
 
-      - name: Install Dependencies
+      - name: Install exact dependencies
         run: npm ci
 
-      - name: Build Project (Vite)
-        run: |
-          npm run build
-          cp -r dist/* ./
+      - name: Lint PHP backend
+        run: find backend -name '*.php' -print0 | xargs -0 -n1 php -l
 
-      - name: Deploy to Server via SSH
-        uses: easingthemes/ssh-deploy@main
+      - name: Build production frontend
+        run: npm run build
+
+      - name: Assemble minimal release
+        run: |
+          set -euo pipefail
+          mkdir -p release/backend
+          cp -a dist/. release/
+          cp .htaccess release/.htaccess
+          rsync -a \
+            --exclude='config/env.php' \
+            --exclude='config/env.example.php' \
+            --exclude='storage/' \
+            --exclude='test*.php' \
+            --exclude='*.sql' \
+            --exclude='*.md' \
+            backend/ release/backend/
+          test -f release/index.html
+          test -f release/backend/api/health.php
+          tar -C release -czf novalink-release.tgz .
+
+      - name: Configure pinned SSH host identity
         env:
           SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_KEY }}
-          ARGS: "-rltgoDzvO"
-          SOURCE: "./"
-          REMOTE_HOST: ${{ secrets.ORACLE_HOST }}
-          REMOTE_USER: ${{ secrets.ORACLE_USER }}
-          TARGET: "/var/www/html/novalink/"
-          EXCLUDE: "/node_modules/, /.git/, /.github/, /src/, /backend/config/env.php"
+          SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload immutable release archive
+        env:
+          ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+          ORACLE_USER: ${{ secrets.ORACLE_USER }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/id_ed25519 novalink-release.tgz "$ORACLE_USER@$ORACLE_HOST:/tmp/novalink-$GITHUB_SHA.tgz"
+
+      - name: Activate release atomically
+        env:
+          ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+          ORACLE_USER: ${{ secrets.ORACLE_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 "$ORACLE_USER@$ORACLE_HOST" \
+            "NOVALINK_RELEASE='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          app_root=/var/www/novalink
+          release_dir="$app_root/releases/$NOVALINK_RELEASE"
+          archive="/tmp/novalink-$NOVALINK_RELEASE.tgz"
+          test -f "$app_root/shared/backend/config/env.php"
+          test ! -e "$release_dir"
+          install -d -m 0755 "$release_dir/backend/config"
+          install -d -m 0750 "$app_root/shared/backend/storage/payment-proofs"
+          tar -xzf "$archive" -C "$release_dir"
+          ln -s "$app_root/shared/backend/config/env.php" "$release_dir/backend/config/env.php"
+          ln -s "$app_root/shared/backend/storage" "$release_dir/backend/storage"
+          ln -sfn "$release_dir" "$app_root/current.next"
+          mv -Tf "$app_root/current.next" "$app_root/current"
+          rm -f "$archive"
+          REMOTE
+
+      - name: Verify production health
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 3 https://novalinkhub.tech/backend/api/health.php

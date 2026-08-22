@@ -13,7 +13,7 @@ export const EmailLogModal = ({ onClose }) => {
           <div className="flex items-center gap-2">
             <Mail className="w-5 h-5 text-blue-400" />
             <h2 className="text-sm font-bold text-slate-100">System Email Log & Notifications</h2>
-            <span className="text-[10px] bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded-full font-semibold">{emailLog.length} sent</span>
+            <span className="text-[10px] bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded-full font-semibold">{emailLog.length} records</span>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition">
             <X className="w-5 h-5" />
@@ -34,6 +34,7 @@ export const EmailLogModal = ({ onClose }) => {
                     <div className="text-[11px] text-slate-400 mt-2 leading-relaxed">{email.body}</div>
                   </div>
                   <div className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
+                    <span className={email.status === 'sent' ? 'text-emerald-400' : email.status === 'failed' ? 'text-red-400' : 'text-amber-400'}>{email.status}</span>
                     <Clock className="w-3 h-3" />
                     {email.sentAt}
                   </div>

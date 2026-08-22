@@ -1,11 +1,51 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Home, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Home, ChevronDown, ChevronUp, Search, Plus, Edit2, X } from 'lucide-react';
+
+const EMPTY_RECORD = {
+  ownerName: '', blockLot: '', street: '', contactNumber: '', email: '', occupantsText: '',
+};
 
 export const HomeownersRecords = () => {
-  const { homeowners, vehicles, dues, stickerRenewals } = useApp();
+  const { homeowners, vehicles, dues, stickerRenewals, addHomeownerRecord, updateHomeownerRecord } = useApp();
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(null);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [recordForm, setRecordForm] = useState(EMPTY_RECORD);
+
+  const openCreate = () => {
+    setEditingRecord('new');
+    setRecordForm(EMPTY_RECORD);
+  };
+
+  const openEdit = (homeowner) => {
+    setEditingRecord(homeowner.id);
+    setRecordForm({
+      ownerName: homeowner.ownerName,
+      blockLot: homeowner.blockLot,
+      street: homeowner.street,
+      contactNumber: homeowner.contactNumber,
+      email: homeowner.email,
+      occupantsText: (homeowner.occupants || [])
+        .map(occupant => `${occupant.fullName} | ${occupant.relationship}`)
+        .join('\n'),
+    });
+  };
+
+  const handleSave = async (event) => {
+    event.preventDefault();
+    const occupants = recordForm.occupantsText.split('\n').map(line => line.trim()).filter(Boolean).map((line) => {
+      const [fullName, ...relationshipParts] = line.split('|');
+      return { fullName: fullName.trim(), relationship: relationshipParts.join('|').trim() };
+    });
+    if (occupants.some(occupant => !occupant.fullName || !occupant.relationship)) return;
+    const payload = { ...recordForm, occupants };
+    delete payload.occupantsText;
+    const result = editingRecord === 'new'
+      ? await addHomeownerRecord(payload)
+      : await updateHomeownerRecord(editingRecord, payload);
+    if (result.success) setEditingRecord(null);
+  };
 
   const filtered = homeowners.filter(h =>
     h.ownerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -15,9 +55,14 @@ export const HomeownersRecords = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-xl font-bold text-slate-100">Homeowners' Master Records</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Centralized registry of all NHAI residents and their related records</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-100">Homeowners' Master Records</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Centralized registry of all NHAI residents and their related records</p>
+        </div>
+        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">
+          <Plus className="w-4 h-4" /> Add Homeowner
+        </button>
       </div>
 
       {/* Stats */}
@@ -51,7 +96,7 @@ export const HomeownersRecords = () => {
           const myDues = dues.filter(d => d.homeownerId === h.id);
           const myRenewals = stickerRenewals.filter(r => r.homeownerId === h.id);
           const unpaidDues = myDues.filter(d => d.status === 'unpaid');
-          const balance = unpaidDues.reduce((sum, d) => sum + d.amountDue + d.penaltyAmount, 0);
+          const balance = unpaidDues.reduce((sum, d) => sum + (d.balanceDue ?? d.amountDue + d.penaltyAmount), 0);
 
           return (
             <div key={h.id} className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
@@ -76,23 +121,28 @@ export const HomeownersRecords = () => {
                   <div className={`text-sm font-bold ${balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {balance > 0 ? `₱${balance.toLocaleString()} owed` : 'Dues settled'}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">{myVehicles.length} vehicle(s) · {h.occupants.length} occupant(s)</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{myVehicles.length} vehicle(s) · {(h.occupants || []).length} occupant(s)</div>
                 </div>
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />}
               </button>
 
               {isExpanded && (
                 <div className="border-t border-slate-700 px-5 py-4 space-y-4">
+                  <div className="flex justify-end">
+                    <button onClick={() => openEdit(h)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/70 hover:bg-blue-600 text-white text-[10px] font-bold transition">
+                      <Edit2 className="w-3 h-3" /> Edit Record
+                    </button>
+                  </div>
                   {/* Occupants */}
                   <div>
                     <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Household Occupants</div>
-                    {h.occupants.length === 0 ? (
+                    {(h.occupants || []).length === 0 ? (
                       <div className="text-xs text-slate-600">No occupants recorded.</div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {h.occupants.map(o => (
                           <div key={o.id} className="px-3 py-1.5 rounded-xl bg-slate-700 text-xs">
-                            <span className="text-slate-200 font-medium">{o.name}</span>
+                            <span className="text-slate-200 font-medium">{o.fullName}</span>
                             <span className="text-slate-500 ml-1.5">({o.relationship})</span>
                           </div>
                         ))}
@@ -133,6 +183,43 @@ export const HomeownersRecords = () => {
         })}
         {filtered.length === 0 && <div className="text-center py-12 text-slate-500 text-sm">No homeowner records found.</div>}
       </div>
+
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSave} className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl">
+            <button type="button" onClick={() => setEditingRecord(null)} className="absolute top-5 right-5 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            <div>
+              <h3 className="text-lg font-bold text-slate-100">{editingRecord === 'new' ? 'Add Homeowner Record' : 'Edit Homeowner Record'}</h3>
+              <p className="text-xs text-slate-400 mt-1">Use the exact registered email and block/lot so resident self-registration can be matched securely.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                ['ownerName', 'Owner Name'], ['blockLot', 'Block & Lot'], ['street', 'Street'],
+                ['contactNumber', 'Contact Number'], ['email', 'Email Address'],
+              ].map(([key, label]) => (
+                <label key={key} className={key === 'email' ? 'sm:col-span-2' : ''}>
+                  <span className="block text-xs font-semibold text-slate-300 mb-1">{label}</span>
+                  <input type={key === 'email' ? 'email' : 'text'} required value={recordForm[key]}
+                    onChange={event => setRecordForm({ ...recordForm, [key]: event.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" />
+                </label>
+              ))}
+            </div>
+            <label>
+              <span className="block text-xs font-semibold text-slate-300 mb-1">Household Occupants</span>
+              <textarea rows={4} value={recordForm.occupantsText}
+                onChange={event => setRecordForm({ ...recordForm, occupantsText: event.target.value })}
+                placeholder={'One per line: Full Name | Relationship\nExample: Maria Dela Cruz | Spouse'}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500" />
+              <span className="text-[10px] text-slate-500">Every non-empty line must contain a name, a vertical bar, and a relationship.</span>
+            </label>
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold">Cancel</button>
+              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">Save Record</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

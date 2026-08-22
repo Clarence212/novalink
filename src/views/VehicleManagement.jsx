@@ -18,11 +18,13 @@ export const VehicleManagement = () => {
     ? vehicles
     : vehicles.filter(v => v.homeownerId === currentHomeowner?.id);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    submitVehicle(form);
-    setForm({ vehicleType: 'Sedan', makeModel: '', plateNumber: '', color: '' });
-    setShowForm(false);
+    const result = await submitVehicle(form);
+    if (result.success) {
+      setForm({ vehicleType: 'Sedan', makeModel: '', plateNumber: '', color: '' });
+      setShowForm(false);
+    }
   };
 
   const vehicleTypes = ['Sedan', 'SUV', 'Pickup Truck', 'Van', 'Motorcycle', 'Other'];
@@ -102,7 +104,7 @@ export const VehicleManagement = () => {
               return (
                 <tr key={v.id} className="hover:bg-slate-700/30 transition">
                   {isAdmin && <td className="px-5 py-3 text-slate-300 font-medium">{homeowner?.ownerName}</td>}
-                  <td className="px-5 py-3 text-slate-400">{v.type}</td>
+                  <td className="px-5 py-3 text-slate-400">{v.vehicleType}</td>
                   <td className="px-5 py-3 text-slate-300 font-medium">{v.makeModel}</td>
                   <td className="px-5 py-3 text-slate-200 font-mono">{v.plateNumber}</td>
                   <td className="px-5 py-3 text-slate-400">{v.color}</td>

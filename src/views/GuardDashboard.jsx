@@ -19,11 +19,13 @@ export const GuardDashboard = () => {
     l.destinationAddress.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    addVisitorLog(form);
-    setForm({ visitorName: '', contactNumber: '', purpose: '', destinationAddress: '', vehiclePlate: '' });
-    setShowForm(false);
+    const result = await addVisitorLog(form);
+    if (result.success) {
+      setForm({ visitorName: '', contactNumber: '', purpose: '', destinationAddress: '', vehiclePlate: '' });
+      setShowForm(false);
+    }
   };
 
   const onSite = visitorLogs.filter(l => !l.exitTime).length;
@@ -47,7 +49,7 @@ export const GuardDashboard = () => {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
           <div className="text-2xl font-bold text-blue-400">{visitorLogs.length}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Total Logs Today</div>
+          <div className="text-xs text-slate-500 mt-0.5">Recent Visitor Logs</div>
         </div>
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
           <div className="text-2xl font-bold text-emerald-400">{onSite}</div>

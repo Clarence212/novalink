@@ -1,94 +1,144 @@
 const API_BASE_URL = '/backend/api';
 
+let csrfToken = '';
 
-export async function apiSendOtp(email, name = 'User', type = 'registration') {
-  try {
-    const res = await fetch(`${API_BASE_URL}/send_otp.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name, type })
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to send OTP email.');
-    }
-    return await res.json();
-  } catch (error) {
-    throw error;
+export class ApiError extends Error {
+  constructor(message, status, payload = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.payload = payload;
   }
 }
 
+async function parseResponse(response) {
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json')
+    ? await response.json().catch(() => ({}))
+    : {};
+  if (!response.ok) {
+    throw new ApiError(payload.error || `Request failed with HTTP ${response.status}.`, response.status, payload);
+  }
+  return payload;
+}
+
+async function request(path, { method = 'GET', body, formData } = {}) {
+  const headers = { Accept: 'application/json' };
+  if (csrfToken && method !== 'GET') headers['X-CSRF-Token'] = csrfToken;
+  if (!formData && body !== undefined) headers['Content-Type'] = 'application/json';
+
+  const response = await fetch(`${API_BASE_URL}/${path}`, {
+    method,
+    credentials: 'same-origin',
+    headers,
+    body: formData || (body === undefined ? undefined : JSON.stringify(body)),
+  });
+  return parseResponse(response);
+}
+
+export function setCsrfToken(value) {
+  csrfToken = value || '';
+}
+
+export async function apiSession() {
+  const result = await request('auth.php?action=session');
+  setCsrfToken(result.csrfToken);
+  return result;
+}
+
+export async function apiLogin(email, password) {
+  const result = await request('auth.php', { method: 'POST', body: { action: 'login', email, password } });
+  setCsrfToken(result.csrfToken);
+  return result;
+}
+
+export async function apiLogout() {
+  const result = await request('auth.php', { method: 'POST', body: { action: 'logout' } });
+  setCsrfToken(result.csrfToken);
+  return result;
+}
+
+export async function apiRegister(userData, verificationToken) {
+  return request('auth.php', {
+    method: 'POST',
+    body: { action: 'register', ...userData, verificationToken },
+  });
+}
+
+export async function apiResetPassword(email, password, verificationToken) {
+  return request('auth.php', {
+    method: 'POST',
+    body: { action: 'reset-password', email, password, verificationToken },
+  });
+}
+
+export async function apiChangePassword(currentPassword, newPassword) {
+  const result = await request('auth.php', {
+    method: 'POST',
+    body: { action: 'change-password', currentPassword, newPassword },
+  });
+  setCsrfToken(result.csrfToken);
+  return result;
+}
+
+export async function apiSendOtp(email, name = 'User', type = 'registration', contactNumber = '') {
+  return request('send_otp.php', {
+    method: 'POST',
+    body: { email, name, type, contactNumber },
+  });
+}
 
 export async function apiVerifyOtp(email, otp, type = 'registration') {
-  try {
-    const res = await fetch(`${API_BASE_URL}/verify_email.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp, type })
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Invalid verification code.');
-    }
-    return await res.json();
-  } catch (error) {
-    throw error;
-  }
+  const result = await request('verify_email.php', {
+    method: 'POST',
+    body: { email, otp, type },
+  });
+  if (result.csrfToken) setCsrfToken(result.csrfToken);
+  return result;
 }
 
+export async function apiFetchState() {
+  const result = await request('state.php');
+  return result.state;
+}
 
+export async function apiFetchPublicFacilities() {
+  const result = await request('state.php?scope=public');
+  return result.facilities || [];
+}
+
+export async function apiAction(resource, action, payload = {}) {
+  return request('records.php', {
+    method: 'POST',
+    body: { resource, action, ...payload },
+  });
+}
+
+export async function apiUploadPayment({ amount, reference, proof }) {
+  const data = new FormData();
+  data.append('resource', 'payments');
+  data.append('action', 'submit');
+  data.append('amount', String(amount));
+  data.append('reference', reference);
+  data.append('proof', proof);
+  return request('records.php', { method: 'POST', formData: data });
+}
+
+export async function apiUploadPaymentQr({ provider, accountName, accountNumber, image }) {
+  const data = new FormData();
+  data.append('resource', 'payment-qr');
+  data.append('action', 'update');
+  data.append('provider', provider);
+  data.append('accountName', accountName);
+  data.append('accountNumber', accountNumber);
+  if (image) data.append('image', image);
+  return request('records.php', { method: 'POST', formData: data });
+}
+
+// Kept for the administrator-only manual notification screen and backwards compatibility.
 export async function apiSendNotification(email, name, title, message) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/send_notification.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name, title, message })
-    });
-    if (!res.ok) {
-      throw new Error('Failed to send notification email.');
-    }
-    return await res.json();
-  } catch (error) {
-    throw error;
-  }
-}
-
-export async function apiFetchUsers() {
-  try {
-    const res = await fetch(`${API_BASE_URL}/users.php`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.users || [];
-  } catch (e) {
-    console.warn('Failed to fetch users from server database:', e);
-    return null;
-  }
-}
-
-export async function apiSaveUser(userData) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/users.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', ...userData })
-    });
-    return await res.json();
-  } catch (e) {
-    console.warn('Failed to sync user to database:', e);
-    return null;
-  }
-}
-
-export async function apiUpdateUserStatus(email, action) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/users.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, email })
-    });
-    return await res.json();
-  } catch (e) {
-    console.warn('Failed to update user status on server:', e);
-    return null;
-  }
+  return request('send_notification.php', {
+    method: 'POST',
+    body: { email, name, title, message },
+  });
 }
