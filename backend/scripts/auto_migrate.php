@@ -121,11 +121,12 @@ try {
           homeowner_id CHAR(36) NOT NULL,
           submitted_by_user_id CHAR(36) NULL,
           reviewed_by_user_id CHAR(36) NULL,
-          vehicle_type ENUM('car', 'motorcycle', 'van', 'suv', 'truck', 'other') NOT NULL,
-          make_model VARCHAR(100) NOT NULL,
+          vehicle_type VARCHAR(50) NOT NULL,
+          make_model VARCHAR(120) NOT NULL,
           plate_number VARCHAR(30) NOT NULL UNIQUE,
           color VARCHAR(50) NOT NULL,
           approval_status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+          reviewed_at DATETIME NULL,
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_vehicles_homeowner (homeowner_id),
@@ -192,6 +193,7 @@ try {
           status ENUM('pending', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending',
           reference_number VARCHAR(32) NULL,
           reviewed_by_user_id CHAR(36) NULL,
+          reviewed_at DATETIME NULL,
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_reservations_facility_date (facility_id, reservation_date),
@@ -219,6 +221,7 @@ try {
           submitted_by_user_id CHAR(36) NULL,
           validated_by_user_id CHAR(36) NULL,
           amount_paid DECIMAL(10,2) NOT NULL,
+          unallocated_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
           payment_reference VARCHAR(100) NOT NULL,
           proof_stored_name VARCHAR(255) NOT NULL,
           proof_original_name VARCHAR(255) NOT NULL,
@@ -231,6 +234,14 @@ try {
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_payments_homeowner (homeowner_id),
           INDEX idx_payments_status (validation_status)
+        ) ENGINE=InnoDB;
+
+        CREATE TABLE IF NOT EXISTS payment_allocations (
+          allocation_id CHAR(36) PRIMARY KEY,
+          payment_id CHAR(36) NOT NULL,
+          dues_id CHAR(36) NOT NULL,
+          amount_applied DECIMAL(10,2) NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB;
 
         CREATE TABLE IF NOT EXISTS payment_qr_codes (
@@ -418,6 +429,7 @@ try {
     // Concerns
     $migrateColumn($pdo, 'concerns', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'concerns', 'responded_by', 'responded_by_user_id', 'CHAR(36) NULL');
+    $addColumn($pdo, 'concerns', 'responded_at', 'DATETIME NULL');
 
     // Facilities
     $migrateColumn($pdo, 'facilities', 'rate', 'rate_label', 'VARCHAR(100) NULL');
@@ -429,15 +441,18 @@ try {
     $addColumn($pdo, 'facility_reservations', 'guest_id', 'CHAR(36) NULL');
     $addColumn($pdo, 'facility_reservations', 'total_amount', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     $addColumn($pdo, 'facility_reservations', 'reference_number', 'VARCHAR(32) NULL');
+    $addColumn($pdo, 'facility_reservations', 'reviewed_at', 'DATETIME NULL');
 
     // Vehicles
     $migrateColumn($pdo, 'vehicles', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'vehicles', 'reviewed_by', 'reviewed_by_user_id', 'CHAR(36) NULL');
+    $addColumn($pdo, 'vehicles', 'reviewed_at', 'DATETIME NULL');
 
     // Sticker Renewals
     $migrateColumn($pdo, 'vehicle_sticker_renewals', 'requested_by', 'requested_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'vehicle_sticker_renewals', 'reviewed_by', 'reviewed_by_user_id', 'CHAR(36) NULL');
     $migrateColumn($pdo, 'vehicle_sticker_renewals', 'approved_at', 'reviewed_at', 'DATETIME NULL');
+    $addColumn($pdo, 'vehicle_sticker_renewals', 'reviewed_at', 'DATETIME NULL');
 
     // Payments
     $migrateColumn($pdo, 'payments', 'submitted_by', 'submitted_by_user_id', 'CHAR(36) NULL');
@@ -446,11 +461,16 @@ try {
     $addColumn($pdo, 'payments', 'proof_original_name', 'VARCHAR(255) NULL');
     $addColumn($pdo, 'payments', 'proof_mime_type', 'VARCHAR(100) NULL');
     $addColumn($pdo, 'payments', 'proof_file_size', 'INT UNSIGNED NOT NULL DEFAULT 0');
+    $addColumn($pdo, 'payments', 'unallocated_amount', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
 
     // Notifications
     $migrateColumn($pdo, 'notifications', 'email_type', 'notification_type', 'VARCHAR(60) NULL');
     $migrateColumn($pdo, 'notifications', 'body_text', 'message_text', 'TEXT NULL');
     $migrateColumn($pdo, 'notifications', 'status', 'delivery_status', "ENUM('queued', 'sent', 'failed') NOT NULL DEFAULT 'queued'");
+    $addColumn($pdo, 'notifications', 'recipient_user_id', 'CHAR(36) NULL');
+    $addColumn($pdo, 'notifications', 'provider_message_id', 'VARCHAR(255) NULL');
+    $addColumn($pdo, 'notifications', 'failure_reason', 'VARCHAR(255) NULL');
+    $addColumn($pdo, 'notifications', 'sent_at', 'DATETIME NULL');
 
     $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
     $pdo->exec("INSERT INTO schema_migrations (migration_id) VALUES ('001_production_schema') ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id)");
