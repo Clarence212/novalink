@@ -19,6 +19,14 @@ export const CookieConsent = () => {
 
   useEffect(() => {
     setVisible(!readConsent());
+
+    const openPreferences = () => {
+      setShowDetails(true);
+      setVisible(true);
+    };
+
+    window.addEventListener('novalink:open-cookie-preferences', openPreferences);
+    return () => window.removeEventListener('novalink:open-cookie-preferences', openPreferences);
   }, []);
 
   const choose = (preference) => {

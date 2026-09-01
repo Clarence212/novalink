@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Mail, CheckCircle } from 'lucide-react';
 import { apiSendOtp, apiVerifyOtp } from '../services/api';
+import { SiteFooter } from '../components/SiteFooter';
 
 export const GuestModeView = () => {
   const { facilities, addReservation, showToast, setIsGuestMode } = useApp();
@@ -59,8 +60,9 @@ export const GuestModeView = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-slate-950 flex flex-col">
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-md">
         {}
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center font-extrabold text-white text-2xl shadow-lg mx-auto mb-3">N</div>
@@ -158,7 +160,9 @@ export const GuestModeView = () => {
             </form>
           </div>
         )}
+        </div>
       </div>
+      <SiteFooter />
     </div>
   );
 };
