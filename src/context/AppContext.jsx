@@ -19,12 +19,15 @@ const AppContext = createContext(null);
 
 const EMPTY_STATE = {
   users: [],
+  registrationRequests: [],
   homeowners: [],
   vehicles: [],
   reservations: [],
   dues: [],
   payments: [],
   visitorLogs: [],
+  visitorPasses: [],
+  visitorPassesReady: false,
   concerns: [],
   announcements: [],
   stickerRenewals: [],
@@ -36,6 +39,12 @@ const EMPTY_STATE = {
     gcashNumber: '',
     imagePath: null,
   },
+  duesSettings: {
+    monthlyDueAmount: 1500,
+    monthlyDueDay: 15,
+    monthlyPenaltyAmount: 200,
+    restrictAfterUnpaidMonths: 2,
+  },
   stickerRenewalPeriod: '',
 };
 
@@ -45,6 +54,7 @@ export const AppProvider = ({ children }) => {
   const [isGuestMode, setGuestMode] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -56,6 +66,7 @@ export const AppProvider = ({ children }) => {
 
   const applyState = useCallback((nextState) => {
     setData({ ...EMPTY_STATE, ...(nextState || {}) });
+    setLastUpdatedAt(new Date());
   }, []);
 
   const refreshState = useCallback(async (silent = false) => {
@@ -200,20 +211,56 @@ export const AppProvider = ({ children }) => {
   }, [applyState, showToast]);
 
   const approveUser = (id) => runAction('users', 'status', { id, status: 'active' }, 'Account approved.');
-  const rejectUser = (id) => runAction('users', 'status', { id, status: 'rejected' }, 'Account rejected.');
-  const deactivateUser = (id) => runAction('users', 'status', { id, status: 'inactive' }, 'Account deactivated.');
+  const rejectUser = (id, reason) => runAction('users', 'status', { id, status: 'rejected', reason }, 'Account rejected.');
+  const deactivateUser = (id, reason) => runAction('users', 'status', { id, status: 'inactive', reason }, 'Account deactivated.');
   const reactivateUser = (id) => runAction('users', 'status', { id, status: 'active' }, 'Account reactivated.');
   const editUser = (id, updates) => runAction('users', 'update', { id, ...updates }, 'User account updated.');
+  const unlockUser = (id) => runAction('users', 'unlock', { id }, 'Account lock and failed sign-in counter cleared.');
+  const forceUserPasswordReset = (id) => runAction(
+    'users',
+    'force-password-reset',
+    { id },
+    'The account must change its password at the next sign-in.',
+  );
+  const resendUserVerification = (id) => runAction(
+    'users',
+    'resend-verification',
+    { id },
+    'A new account-verification code was emailed.',
+  );
+  const resolveRegistrationMatch = (payload) => runAction(
+    'reconciliation',
+    'resolve-registration',
+    payload,
+    'Homeowner record aligned. The resident can retry registration.',
+  );
+  const linkResidentAccount = (payload) => runAction(
+    'reconciliation',
+    'link-user',
+    payload,
+    'Resident account linked to the homeowner record.',
+  );
 
   const addVisitorLog = (payload) => runAction('visitors', 'create', payload, 'Visitor entry saved.');
   const updateVisitorExit = (id) => runAction('visitors', 'exit', { id }, 'Visitor exit recorded.');
+  const createVisitorPass = (payload) => runAction('visitor-passes', 'create', payload, 'Visitor pass created.');
+  const cancelVisitorPass = (id) => runAction('visitor-passes', 'cancel', { id }, 'Visitor pass cancelled.');
+  const lookupVisitorPass = (passCode) => runAction('visitor-passes', 'lookup', { passCode }, null, false);
+  const admitVisitorPass = (passCode) => runAction('visitor-passes', 'redeem', { passCode }, 'Visitor admitted and entry recorded.');
   const addAnnouncement = (payload) => runAction('announcements', 'create', payload, 'Announcement published.');
   const addReservation = (payload) => runAction('reservations', 'create', payload, 'Reservation request submitted.', Boolean(currentUser));
   const updateReservationStatus = (id, status) => runAction('reservations', 'status', { id, status }, `Reservation ${status}.`);
   const validatePayment = (id) => runAction('payments', 'validate', { id }, 'Payment validated.');
-  const rejectPayment = (id) => runAction('payments', 'reject', { id }, 'Payment proof rejected.');
+  const rejectPayment = (id, reason) => runAction('payments', 'reject', { id, reason }, 'Payment proof rejected.');
+  const reconcilePaymentCredits = () => runAction(
+    'payments',
+    'reconcile-credits',
+    {},
+    'Available homeowner credits were applied to outstanding dues.',
+  );
   const sendDuesReminder = (homeownerId = null) => runAction('payments', 'remind', { homeownerId }, 'Dues reminders processed.');
   const generateDues = (payload) => runAction('dues', 'generate', payload, 'Monthly dues generated.');
+  const configureDues = (payload) => runAction('dues', 'configure', payload, 'Automatic dues settings updated.');
   const submitConcern = (payload) => runAction('concerns', 'create', payload, 'Concern submitted.');
   const respondToConcern = (id, response, status) => runAction('concerns', 'respond', { id, response, status }, 'Concern response saved.');
   const submitVehicle = (payload) => runAction('vehicles', 'create', payload, 'Vehicle information submitted.');
@@ -234,9 +281,10 @@ export const AppProvider = ({ children }) => {
         amount: payload.amount,
         reference: payload.reference,
         proof: payload.proofFile,
+        paymentId: payload.paymentId || null,
       });
       applyState(await apiFetchState());
-      showToast('Payment proof submitted for validation.', 'success');
+      showToast(payload.paymentId ? 'Payment proof resubmitted for validation.' : 'Payment proof submitted for validation.', 'success');
       return { success: true, ...result };
     } catch (error) {
       showToast(error.message || 'Payment proof could not be submitted.', 'warning');
@@ -270,6 +318,7 @@ export const AppProvider = ({ children }) => {
     setIsGuestMode,
     isBootstrapping,
     isRefreshing,
+    lastUpdatedAt,
     toast,
     isRestricted,
     showToast,
@@ -284,16 +333,27 @@ export const AppProvider = ({ children }) => {
     deactivateUser,
     reactivateUser,
     editUser,
+    unlockUser,
+    forceUserPasswordReset,
+    resendUserVerification,
+    resolveRegistrationMatch,
+    linkResidentAccount,
     addVisitorLog,
     updateVisitorExit,
+    createVisitorPass,
+    cancelVisitorPass,
+    lookupVisitorPass,
+    admitVisitorPass,
     addAnnouncement,
     addReservation,
     updateReservationStatus,
     validatePayment,
     rejectPayment,
+    reconcilePaymentCredits,
     submitPaymentProof,
     sendDuesReminder,
     generateDues,
+    configureDues,
     updatePaymentQr,
     submitConcern,
     respondToConcern,

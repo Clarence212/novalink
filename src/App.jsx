@@ -12,15 +12,19 @@ import { ResidentDashboard } from './views/ResidentDashboard';
 import { GuardDashboard } from './views/GuardDashboard';
 import { HomeownersRecords } from './views/HomeownersRecords';
 import { UserManagement } from './views/UserManagement';
+import { AccountReconciliation } from './views/AccountReconciliation';
 import { VisitorManagement } from './views/VisitorManagement';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { FacilityReservations } from './views/FacilityReservations';
 import { DuesManagement } from './views/DuesManagement';
 import { DuesSummaryCharts } from './views/DuesSummaryCharts';
+import { ReportingDashboard } from './views/ReportingDashboard';
 import { ResidentConcerns } from './views/ResidentConcerns';
 import { VehicleManagement } from './views/VehicleManagement';
 import { StickerRenewals } from './views/StickerRenewals';
 import { GuestModeView } from './views/GuestModeView';
+import { LoadingPanel } from './components/ui/Primitives';
+import { CookieConsent } from './components/CookieConsent';
 
 const AppContent = () => {
   const { currentUser, isGuestMode, setIsGuestMode, isBootstrapping, logout, changePassword } = useApp();
@@ -33,10 +37,7 @@ const AppContent = () => {
   if (isBootstrapping) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin mx-auto" />
-          <p className="text-xs mt-3">Connecting securely to NovaLink…</p>
-        </div>
+        <LoadingPanel label="Connecting securely to NovaLink…" />
       </div>
     );
   }
@@ -89,9 +90,9 @@ const AppContent = () => {
 
   
   const allowedViews = {
-    admin: new Set(['dashboard', 'homeowners', 'user-management', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'concerns', 'vehicles', 'stickers', 'email-log']),
+    admin: new Set(['dashboard', 'homeowners', 'user-management', 'account-reconciliation', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'reports', 'concerns', 'vehicles', 'stickers', 'email-log']),
     security: new Set(['dashboard', 'visitor-management', 'announcements']),
-    resident: new Set(['dashboard', 'announcements', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers']),
+    resident: new Set(['dashboard', 'announcements', 'visitor-management', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers']),
   };
 
   const handleSetView = (view) => {
@@ -121,25 +122,27 @@ const AppContent = () => {
       return role === 'admin'
         ? <AdminDashboard setActiveView={handleSetView} />
         : role === 'security'
-          ? <GuardDashboard />
+          ? <GuardDashboard setActiveView={handleSetView} />
           : <ResidentDashboard setActiveView={handleSetView} />;
     }
 
     
     if (activeView === 'dashboard') {
       if (role === 'admin') return <AdminDashboard setActiveView={handleSetView} />;
-      if (role === 'security') return <GuardDashboard />;
+      if (role === 'security') return <GuardDashboard setActiveView={handleSetView} />;
       return <ResidentDashboard setActiveView={handleSetView} />;
     }
 
     const viewMap = {
       'homeowners': <HomeownersRecords />,
       'user-management': <UserManagement />,
+      'account-reconciliation': <AccountReconciliation onOpenHomeowners={() => handleSetView('homeowners')} />,
       'visitor-management': <VisitorManagement />,
       'announcements': <AnnouncementsView />,
       'reservations': <FacilityReservations />,
       'dues': <DuesManagement />,
       'dues-charts': <DuesSummaryCharts />,
+      'reports': <ReportingDashboard setActiveView={handleSetView} />,
       'concerns': <ResidentConcerns />,
       'vehicles': <VehicleManagement />,
       'stickers': <StickerRenewals />,
@@ -151,6 +154,7 @@ const AppContent = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100">
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <Toast />
       {showEmailLog && <EmailLogModal onClose={() => setShowEmailLog(false)} />}
 
@@ -163,7 +167,7 @@ const AppContent = () => {
       <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 53px)' }}>
         {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/70 lg:hidden" />}
         <Sidebar activeView={activeView} setActiveView={handleSetView} isOpen={sidebarOpen} />
-        <main className="flex-1 overflow-y-auto bg-slate-950">
+        <main id="main-content" tabIndex="-1" className="flex-1 overflow-y-auto bg-slate-950 focus:outline-none">
           {renderView()}
         </main>
       </div>
@@ -175,6 +179,7 @@ export default function App() {
   return (
     <AppProvider>
       <AppContent />
+      <CookieConsent />
     </AppProvider>
   );
 }

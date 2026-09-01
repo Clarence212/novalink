@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ClipboardList, CheckCircle, XCircle, Plus } from 'lucide-react';
+import { ConfirmDialog, EmptyState, PageHeader } from '../components/ui/Primitives';
 
 const statusBadge = (s) => {
   const m = { pending: 'bg-amber-900/60 text-amber-400', approved: 'bg-emerald-900/60 text-emerald-400', rejected: 'bg-red-900/60 text-red-400' };
@@ -11,6 +12,8 @@ export const StickerRenewals = () => {
   const { currentUser, currentHomeowner, vehicles, stickerRenewals, homeowners, stickerRenewalPeriod, submitStickerRenewal, reviewStickerRenewal, setStickerRenewalPeriod, showToast } = useApp();
   const isAdmin = currentUser?.role === 'admin';
   const [periodInput, setPeriodInput] = useState(stickerRenewalPeriod || '');
+  const [confirmation, setConfirmation] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const myVehicles = vehicles.filter(v => v.homeownerId === currentHomeowner?.id && v.approvalStatus === 'approved');
   const myRenewals = isAdmin ? stickerRenewals : stickerRenewals.filter(r => r.homeownerId === currentHomeowner?.id);
@@ -21,12 +24,17 @@ export const StickerRenewals = () => {
     await submitStickerRenewal(vehicleId);
   };
 
+  const confirmReview = async () => {
+    if (!confirmation) return;
+    setBusy(true);
+    await reviewStickerRenewal(confirmation.renewal.id, confirmation.status);
+    setBusy(false);
+    setConfirmation(null);
+  };
+
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-xl font-bold text-slate-100">HOA Vehicle Sticker Renewals</h2>
-        <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Review and process HOA vehicle sticker renewal requests' : 'Request sticker renewals for your approved registered vehicles'}</p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <PageHeader eyebrow="Vehicle access" title="HOA Vehicle Sticker Renewals" description={isAdmin ? 'Review and process vehicle-sticker renewal requests.' : 'Request sticker renewals for your approved registered vehicles.'} />
 
       {isAdmin && (
         <form onSubmit={async event => { event.preventDefault(); await setStickerRenewalPeriod(periodInput || stickerRenewalPeriod); }} className="flex items-end gap-3 bg-slate-800 border border-slate-700 rounded-2xl p-4">
@@ -78,7 +86,7 @@ export const StickerRenewals = () => {
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">{isAdmin ? 'All Renewal Requests' : 'My Renewal Requests'}</h3>
         </div>
-        <table className="w-full text-xs">
+        <table data-responsive-table="true" className="w-full min-w-[950px] text-xs">
           <thead>
             <tr className="text-left text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-700">
               {isAdmin && <th className="px-5 py-3">Homeowner</th>}
@@ -97,22 +105,22 @@ export const StickerRenewals = () => {
               const homeowner = isAdmin ? homeowners.find(h => h.id === r.homeownerId) : null;
               return (
                 <tr key={r.id} className="hover:bg-slate-700/30 transition">
-                  {isAdmin && <td className="px-5 py-3 text-slate-300 font-medium">{homeowner?.ownerName}</td>}
-                  <td className="px-5 py-3 text-slate-300">{vehicle?.makeModel}</td>
-                  <td className="px-5 py-3 text-slate-200 font-mono">{vehicle?.plateNumber}</td>
-                  <td className="px-5 py-3 text-slate-400">{r.renewalPeriod}</td>
-                  <td className="px-5 py-3 text-slate-400 font-mono text-[10px]">{r.stickerNumber || '—'}</td>
-                  <td className="px-5 py-3 text-slate-400">{r.requestedAt}</td>
-                  <td className="px-5 py-3">{statusBadge(r.status)}</td>
+                  {isAdmin && <td data-label="Homeowner" className="px-5 py-3 text-slate-300 font-medium">{homeowner?.ownerName}</td>}
+                  <td data-label="Vehicle" className="px-5 py-3 text-slate-300">{vehicle?.makeModel}</td>
+                  <td data-label="Plate" className="px-5 py-3 text-slate-200 font-mono">{vehicle?.plateNumber}</td>
+                  <td data-label="Period" className="px-5 py-3 text-slate-400">{r.renewalPeriod}</td>
+                  <td data-label="Sticker number" className="px-5 py-3 text-slate-400 font-mono text-[10px]">{r.stickerNumber || '—'}</td>
+                  <td data-label="Requested" className="px-5 py-3 text-slate-400">{r.requestedAt}</td>
+                  <td data-label="Status" className="px-5 py-3">{statusBadge(r.status)}</td>
                   {isAdmin && (
-                    <td className="px-5 py-3">
+                    <td data-label="Action" className="px-5 py-3">
                       {r.status === 'pending' && (
-                        <div className="flex gap-1">
-                          <button onClick={() => reviewStickerRenewal(r.id, 'approved')} className="p-1 rounded-lg bg-emerald-600/70 hover:bg-emerald-600 text-white transition" title="Approve">
-                            <CheckCircle className="w-3.5 h-3.5" />
+                        <div className="flex justify-end gap-2 md:justify-start">
+                          <button type="button" onClick={() => setConfirmation({ renewal: r, vehicle, status: 'approved' })} className="ui-button min-h-9 bg-emerald-600 px-3 text-white hover:bg-emerald-500">
+                            <CheckCircle className="w-3.5 h-3.5" /> Approve
                           </button>
-                          <button onClick={() => reviewStickerRenewal(r.id, 'rejected')} className="p-1 rounded-lg bg-red-600/70 hover:bg-red-600 text-white transition" title="Reject">
-                            <XCircle className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => setConfirmation({ renewal: r, vehicle, status: 'rejected' })} className="ui-button min-h-9 bg-red-600 px-3 text-white hover:bg-red-500">
+                            <XCircle className="w-3.5 h-3.5" /> Reject
                           </button>
                         </div>
                       )}
@@ -122,11 +130,22 @@ export const StickerRenewals = () => {
               );
             })}
             {myRenewals.length === 0 && (
-              <tr><td colSpan={isAdmin ? 8 : 6} className="text-center py-10 text-slate-500">No sticker renewal requests yet.</td></tr>
+              <tr><td colSpan={isAdmin ? 8 : 6}><EmptyState icon={ClipboardList} title="No sticker renewal requests" description="New requests for the active renewal period will appear here." /></td></tr>
             )}
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={`${confirmation?.status === 'approved' ? 'Approve' : 'Reject'} this sticker request?`}
+        description={confirmation ? `${confirmation.vehicle?.makeModel || 'Vehicle'} · ${confirmation.vehicle?.plateNumber || 'No plate'}` : ''}
+        impact={confirmation?.status === 'approved' ? 'The renewal will be marked approved and become part of the resident record.' : 'The resident will need to submit another renewal request.'}
+        confirmLabel={confirmation?.status === 'approved' ? 'Approve Renewal' : 'Reject Renewal'}
+        tone={confirmation?.status === 'approved' ? 'warning' : 'danger'}
+        busy={busy}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={confirmReview}
+      />
     </div>
   );
 };

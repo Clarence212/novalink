@@ -60,10 +60,8 @@ graph TD
 
 | Role | Default Primary Account | Access Rights |
 | :--- | :--- | :--- |
-| **Main Administrator** | `clarence@novalinkhub.tech` | Full System Control, User Account Creation/Approvals, Homeowner Records, Dues Validation, Announcement Dispatch. |
 | **NHAI Administrator** | `admin@novalinkhub.tech` | System Administration & Records Management. |
 | **Security Officer** | `guard@novalinkhub.tech` | Gate Visitor Entry Logging, On-Site Visitor Tracking, Exit Log Recording. |
-| **Resident Homeowner** | `clarence.lagamia@gmail.com` | Facility Booking, Dues Payment Upload, Vehicle Registration, Sticker Renewal, Concern Submissions. |
 
 ---
 

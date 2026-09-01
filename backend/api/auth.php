@@ -28,7 +28,8 @@ try {
     if ($action === 'login') {
         $email = normalize_email($input['email'] ?? '');
         $password = (string) ($input['password'] ?? '');
-        enforce_rate_limit($pdo, 'login', $email, 5, 900, 900);
+        $loginRateAction = 'login:' . substr(hash('sha256', $email), 0, 32);
+        enforce_rate_limit($pdo, $loginRateAction, $email, 5, 900, 900);
 
         $statement = $pdo->prepare(
             'SELECT u.user_id, u.password_hash, u.account_status, u.email_verified,
@@ -71,7 +72,7 @@ try {
             'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = UTC_TIMESTAMP() WHERE user_id = ?'
         );
         $update->execute([$record['user_id']]);
-        clear_rate_limit($pdo, 'login', $email);
+        clear_rate_limit($pdo, $loginRateAction, $email);
         audit_log($pdo, $record['user_id'], 'auth.login', 'user', $record['user_id']);
         json_response(['success' => true, 'user' => session_user($pdo), 'csrfToken' => csrf_token()]);
     }
@@ -97,6 +98,10 @@ try {
         $password = require_password($input['password'] ?? '');
         $verificationToken = required_string($input, 'verificationToken', 256, 'Verification token');
         $blockLot = required_string($input, 'blockLot', 100, 'Block and lot');
+        $blockLotKey = strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $blockLot));
+        if ($blockLotKey === '') {
+            json_response(['error' => 'Block and lot must contain letters or numbers.'], 422);
+        }
 
         enforce_rate_limit($pdo, 'register', $email, 3, 3600, 3600);
         $statement = $pdo->prepare(
@@ -119,12 +124,22 @@ try {
 
         $homeowner = $pdo->prepare(
             "SELECT homeowner_id FROM homeowners
-             WHERE email = ? AND LOWER(TRIM(block_lot)) = LOWER(TRIM(?))
+             WHERE email = ?
+               AND REGEXP_REPLACE(LOWER(block_lot), '[^a-z0-9]', '') = ?
                AND user_id IS NULL AND record_status = 'active' LIMIT 1"
         );
-        $homeowner->execute([$email, $blockLot]);
+        $homeowner->execute([$email, $blockLotKey]);
         $homeownerId = $homeowner->fetchColumn();
         if (!$homeownerId) {
+            audit_log(
+                $pdo,
+                null,
+                'registration.match_failed',
+                'email_verification_token',
+                $tokenRecord['token_id'],
+                null,
+                ['email' => $email, 'fullName' => $fullName, 'blockLot' => $blockLot]
+            );
             json_response([
                 'error' => 'The email and block/lot do not match an unlinked NHAI homeowner record. Contact the office to update the master record.',
             ], 422);
@@ -192,10 +207,12 @@ try {
         enforce_rate_limit($pdo, 'reset-password', $email, 5, 3600, 3600);
 
         $statement = $pdo->prepare(
-            "SELECT token_id, action_token_hash FROM email_verification_tokens
-             WHERE email = ? AND purpose = 'password_reset' AND verified_at IS NOT NULL
-               AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP()
-             ORDER BY created_at DESC LIMIT 1"
+            "SELECT token.token_id, token.action_token_hash, account.user_id
+             FROM email_verification_tokens token
+             JOIN users account ON account.email = token.email
+             WHERE token.email = ? AND token.purpose = 'password_reset' AND token.verified_at IS NOT NULL
+               AND token.consumed_at IS NULL AND token.expires_at > UTC_TIMESTAMP()
+             ORDER BY token.created_at DESC LIMIT 1"
         );
         $statement->execute([$email]);
         $record = $statement->fetch();
@@ -216,7 +233,7 @@ try {
             $consume->execute([$record['token_id']]);
             $pdo->commit();
             clear_rate_limit($pdo, 'reset-password', $email);
-            audit_log($pdo, null, 'auth.password_reset', 'user', null, null, ['email' => $email]);
+            audit_log($pdo, null, 'auth.password_reset', 'user', $record['user_id'], null, ['email' => $email]);
             json_response(['success' => true, 'message' => 'Password updated successfully.']);
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) {

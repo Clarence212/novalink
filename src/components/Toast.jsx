@@ -19,8 +19,8 @@ export const Toast = () => {
   };
 
   return (
-    <div className="fixed top-5 right-5 z-50 animate-bounce">
-      <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-xs font-semibold ${bgColors[toast.type] || bgColors.info}`}>
+    <div className="pointer-events-none fixed inset-x-4 top-4 z-[100] flex justify-center sm:inset-x-auto sm:right-5 sm:justify-end" role="status" aria-live="polite" aria-atomic="true">
+      <div className={`flex max-w-lg items-start gap-3 rounded-2xl px-4 py-3 text-sm font-semibold shadow-2xl motion-safe:animate-[fadeIn_.18s_ease-out] ${bgColors[toast.type] || bgColors.info}`}>
         {icons[toast.type]}
         <span>{toast.message}</span>
       </div>

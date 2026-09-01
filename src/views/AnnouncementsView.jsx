@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, Bell, X, AlertTriangle } from 'lucide-react';
+import { EmptyState, PageHeader } from '../components/ui/Primitives';
 
 const priorityConfig = {
   urgent: { label: 'Urgent', border: 'border-red-700/50', bg: 'bg-red-950/30', badge: 'bg-red-900/60 text-red-400', dot: 'bg-red-500' },
@@ -25,21 +26,16 @@ export const AnnouncementsView = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">Announcements & Notices</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Community updates from Novaville HOA Administration</p>
-        </div>
-        {isAdmin && (
+    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+      <PageHeader eyebrow="Communication" title="Announcements & Notices" description="Community updates from Novaville HOA Administration." actions={isAdmin && (
           <button
+            type="button"
             onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+            className="ui-button bg-blue-600 text-white hover:bg-blue-500"
           >
             <Plus className="w-4 h-4" /> Post Announcement
           </button>
-        )}
-      </div>
+        )} />
 
       {}
       {isAdmin && showForm && (
@@ -98,7 +94,7 @@ export const AnnouncementsView = () => {
       {}
       <div className="space-y-4">
         {announcements.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 text-sm">No announcements posted yet.</div>
+          <div className="rounded-2xl border border-dashed border-slate-700"><EmptyState icon={Bell} title="No announcements yet" description="Published community updates will appear here." /></div>
         ) : (
           announcements.map(a => {
             const config = priorityConfig[a.priority] || priorityConfig.normal;

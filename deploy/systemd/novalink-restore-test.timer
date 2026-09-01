@@ -1,0 +1,10 @@
+[Unit]
+Description=Verify a NovaLink database restore weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 03:17:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target
