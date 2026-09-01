@@ -37,6 +37,51 @@ try {
         json_response(['error' => 'Invalid or expired verification code.'], 422);
     }
 
+    if ($purpose === 'registration') {
+        $existing = $pdo->prepare('SELECT user_id, email_verified FROM users WHERE email = ? LIMIT 1');
+        $existing->execute([$email]);
+        $existingAccount = $existing->fetch();
+        if ($existingAccount) {
+            if ((bool) $existingAccount['email_verified']) {
+                json_response(['error' => 'This account email is already verified.'], 409);
+            }
+            $pdo->beginTransaction();
+            try {
+                $consume = $pdo->prepare(
+                    'UPDATE email_verification_tokens
+                     SET verified_at = UTC_TIMESTAMP(), consumed_at = UTC_TIMESTAMP(), attempt_count = attempt_count + 1
+                     WHERE token_id = ? AND consumed_at IS NULL'
+                );
+                $consume->execute([$record['token_id']]);
+                if ($consume->rowCount() !== 1) {
+                    throw new RuntimeException('The verification code was already used.');
+                }
+                $verifyAccount = $pdo->prepare(
+                    'UPDATE users SET email_verified = 1, email_verified_at = UTC_TIMESTAMP()
+                     WHERE user_id = ? AND email_verified = 0'
+                );
+                $verifyAccount->execute([$existingAccount['user_id']]);
+                if ($verifyAccount->rowCount() !== 1) {
+                    throw new RuntimeException('The account email could not be verified.');
+                }
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+            clear_rate_limit($pdo, 'otp-verify-' . $purpose, $email);
+            audit_log($pdo, null, 'user.email_verified', 'user', $existingAccount['user_id'], ['emailVerified' => false], ['emailVerified' => true]);
+            audit_log($pdo, null, 'otp.verify', 'email_verification_token', $record['token_id'], null, ['purpose' => $purpose, 'email' => $email]);
+            json_response([
+                'success' => true,
+                'message' => 'Account email verified successfully. You can now sign in once the account is active.',
+                'accountVerified' => true,
+            ]);
+        }
+    }
+
     $actionToken = bin2hex(random_bytes(32));
     $update = $pdo->prepare(
         'UPDATE email_verification_tokens

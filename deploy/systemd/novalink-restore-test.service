@@ -1,0 +1,14 @@
+[Unit]
+Description=Verify the latest NovaLink backup can be restored
+After=mariadb.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/novalink/backup.env
+ExecStart=/usr/bin/bash /var/www/html/novalink/backend/scripts/verify_restore.sh
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/novalink

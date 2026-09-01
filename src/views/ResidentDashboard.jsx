@@ -4,6 +4,7 @@ import {
   Calendar, CreditCard, MessageSquare, Bell, Car, ClipboardList,
   AlertTriangle, CheckCircle, ArrowRight, Lock
 } from 'lucide-react';
+import { PageHeader } from '../components/ui/Primitives';
 
 export const ResidentDashboard = ({ setActiveView }) => {
   const { currentUser, currentHomeowner, dues, reservations, concerns, announcements, isRestricted, stickerRenewals } = useApp();
@@ -11,7 +12,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
   const displayName = currentUser?.fullName || 'Resident';
 
   const myDues = dues.filter(d => d.homeownerId === currentHomeowner?.id);
-  const unpaidDues = myDues.filter(d => d.status === 'unpaid');
+  const unpaidDues = myDues.filter(d => Number(d.balanceDue ?? d.amountDue ?? 0) > 0);
   const myReservations = reservations.filter(r => r.homeownerId === currentHomeowner?.id);
   const myConcerns = concerns.filter(c => c.homeownerId === currentHomeowner?.id);
   const myStickers = stickerRenewals.filter(s => s.homeownerId === currentHomeowner?.id);
@@ -77,12 +78,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
       {}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
-          Good morning, {displayName}! 👋
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">Welcome to your community dashboard</p>
-      </div>
+      <PageHeader eyebrow="Resident portal" title={`Welcome, ${displayName}`} description="Your dues, bookings, requests, and community updates in one place." />
 
       {}
       {unpaidDues.length > 0 && (
@@ -110,10 +106,13 @@ export const ResidentDashboard = ({ setActiveView }) => {
         {residentModules.map((m) => {
           const Icon = m.icon;
           return (
-            <div
+            <button
+              type="button"
               key={m.id}
               onClick={() => !m.locked && setActiveView(m.id)}
-              className={`p-6 rounded-2xl border transition duration-200 flex flex-col justify-between group shadow-sm ${
+              disabled={m.locked}
+              aria-label={m.locked ? `${m.title}, service restricted` : `Open ${m.title}`}
+              className={`p-6 rounded-2xl border text-left transition duration-200 flex flex-col justify-between group shadow-sm ${
                 m.locked
                   ? 'bg-slate-900/50 border-slate-800/60 opacity-60 cursor-not-allowed'
                   : 'bg-slate-900 border-slate-800 hover:border-blue-500/50 hover:bg-slate-850 cursor-pointer hover:shadow-lg'
@@ -142,7 +141,7 @@ export const ResidentDashboard = ({ setActiveView }) => {
                 <span>{m.locked ? 'Service Restricted' : 'Access Module'}</span>
                 {!m.locked && <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition" />}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

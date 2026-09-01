@@ -7,6 +7,8 @@ define('APP_ORIGIN', 'https://novalinkhub.tech');
 define('SESSION_NAME', 'novalink_session');
 // Optional: an absolute directory writable only by the PHP service account.
 define('SESSION_SAVE_PATH', '');
+// Optional JSON Lines error log. Its parent directory must already exist and be writable by PHP.
+define('ERROR_LOG_PATH', '/var/log/novalink/app-errors.jsonl');
 
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', '3306');

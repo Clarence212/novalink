@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, X, MessageSquare, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { EmptyState, PageHeader } from '../components/ui/Primitives';
 
 const statusConfig = {
   pending: { label: 'Pending', badge: 'bg-amber-900/60 text-amber-400', icon: Clock },
@@ -40,18 +41,12 @@ export const ResidentConcerns = () => {
   const concernTypes = ['Maintenance', 'Security', 'Noise Complaint', 'Sanitation', 'Billing Inquiry', 'Request', 'Other'];
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">{isAdmin ? 'Concern Management' : 'My Concerns'}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Review, respond to, and manage submitted resident concerns' : 'Submit and track your concerns, complaints, or requests'}</p>
-        </div>
-        {!isAdmin && (
+    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+      <PageHeader eyebrow="Community support" title={isAdmin ? 'Concern Management' : 'My Concerns'} description={isAdmin ? 'Review, respond to, and manage resident concerns.' : 'Submit and track concerns, complaints, or requests.'} actions={!isAdmin && (
           <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">
             <Plus className="w-4 h-4" /> Submit Concern
           </button>
-        )}
-      </div>
+        )} />
 
       {}
       {!isAdmin && showForm && (
@@ -88,10 +83,10 @@ export const ResidentConcerns = () => {
 
       {}
       {isAdmin && selectedConcern && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl">
+        <div className="ui-modal-backdrop" role="presentation">
+          <div className="ui-modal max-w-lg" role="dialog" aria-modal="true" aria-labelledby="concern-response-title">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-100">Respond to Concern</h3>
+              <h3 id="concern-response-title" className="text-sm font-bold text-slate-100">Respond to Concern</h3>
               <button onClick={() => setSelectedConcern(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 mb-4 text-xs">
@@ -124,7 +119,7 @@ export const ResidentConcerns = () => {
       {}
       <div className="space-y-4">
         {myConcerns.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 text-sm">No concerns submitted yet.</div>
+          <div className="rounded-2xl border border-dashed border-slate-700"><EmptyState icon={MessageSquare} title="No concerns submitted" description={isAdmin ? 'New resident concerns will appear here.' : 'Your submitted concerns and official responses will appear here.'} /></div>
         ) : (
           myConcerns.map(c => {
             const config = statusConfig[c.status] || statusConfig.pending;

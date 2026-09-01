@@ -1,170 +1,66 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { ArrowRight, Bell, Clock3, DoorOpen, LogOut, Search, ShieldCheck, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Plus, Search, LogOut, Clock, Shield } from 'lucide-react';
+import { Button, EmptyState, PageHeader, StatCard } from '../components/ui/Primitives';
 
-const statusBadge = (exitTime) => exitTime
-  ? <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-700 text-slate-400 font-semibold">Exited</span>
-  : <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-900/60 text-emerald-400 font-semibold">On-Site</span>;
+const manilaToday = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
 
-export const GuardDashboard = () => {
-  const { currentUser, visitorLogs, addVisitorLog, updateVisitorExit, announcements } = useApp();
+export const GuardDashboard = ({ setActiveView }) => {
+  const { currentUser, visitorLogs, updateVisitorExit, announcements } = useApp();
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ visitorName: '', contactNumber: '', purpose: '', destinationAddress: '', vehiclePlate: '' });
+  const [busy, setBusy] = useState('');
+  const today = manilaToday();
+  const todayLogs = visitorLogs.filter((log) => log.entryDate === today);
+  const onSite = visitorLogs.filter((log) => !log.exitTime);
+  const visibleOnSite = useMemo(() => onSite.filter((log) => (
+    log.visitorName.toLowerCase().includes(search.toLowerCase())
+    || log.destinationAddress.toLowerCase().includes(search.toLowerCase())
+  )), [onSite, search]);
 
-  const displayName = currentUser?.fullName || 'Security Officer';
-
-  const filtered = visitorLogs.filter(l =>
-    l.visitorName.toLowerCase().includes(search.toLowerCase()) ||
-    l.destinationAddress.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const result = await addVisitorLog(form);
-    if (result.success) {
-      setForm({ visitorName: '', contactNumber: '', purpose: '', destinationAddress: '', vehiclePlate: '' });
-      setShowForm(false);
-    }
+  const checkout = async (id) => {
+    setBusy(id);
+    await updateVisitorExit(id);
+    setBusy('');
   };
 
-  const onSite = visitorLogs.filter(l => !l.exitTime).length;
-
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">Security — Visitor Logging</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Welcome, {displayName} · Record and monitor visitor entry at the gate</p>
-        </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
-        >
-          <Plus className="w-4 h-4" /> Log Visitor Entry
-        </button>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
+      <PageHeader
+        eyebrow="Security overview"
+        title={`Welcome, ${currentUser?.fullName || 'Security Officer'}`}
+        description="Keep the gate moving. Validate passes and record entries in Visitor Gate, then check visitors out from this live list."
+        actions={<Button onClick={() => setActiveView('visitor-management')} className="min-h-12 px-5 text-sm"><DoorOpen className="h-5 w-5" /> Open Visitor Gate</Button>}
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Currently on site" value={onSite.length} detail="Open visitor entries" icon={Users} tone="emerald" />
+        <StatCard label="Entries today" value={todayLogs.length} detail={today} icon={ShieldCheck} tone="blue" />
+        <StatCard label="Checked out today" value={todayLogs.filter((log) => log.exitTime).length} detail="Completed visits" icon={LogOut} tone="violet" />
       </div>
 
-      {}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-blue-400">{visitorLogs.length}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Recent Visitor Logs</div>
+      <section className="ui-surface overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="ui-eyebrow">Live gate status</p><h2 className="mt-1 text-base font-bold text-slate-100">Visitors currently on site</h2></div>
+          <label className="relative block sm:w-80"><span className="sr-only">Search on-site visitors</span><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="ui-input pl-9" placeholder="Search visitor or destination" /></label>
         </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-emerald-400">{onSite}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Currently On-Site</div>
-        </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-slate-400">{visitorLogs.length - onSite}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Already Exited</div>
-        </div>
-      </div>
+        {visibleOnSite.length ? <div className="grid gap-3 p-4 lg:grid-cols-2">
+          {visibleOnSite.map((log) => <article key={log.id} className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-base font-bold text-slate-100">{log.visitorName}</h3><p className="mt-1 text-sm text-slate-400">{log.destinationAddress}</p></div><span className="rounded-full bg-emerald-950 px-2.5 py-1 text-xs font-bold text-emerald-300">ON SITE</span></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><p className="text-slate-500">Purpose</p><p className="mt-1 font-semibold text-slate-300">{log.purpose}</p></div><div><p className="text-slate-500">Entered</p><p className="mt-1 font-semibold text-slate-300">{log.entryTimeDisplay || log.entryTime}</p></div></div>
+            <Button variant="warning" disabled={busy === log.id} onClick={() => checkout(log.id)} className="mt-4 min-h-12 w-full text-sm"><LogOut className="h-5 w-5" /> {busy === log.id ? 'Checking out…' : 'Quick check-out'}</Button>
+          </article>)}
+        </div> : <EmptyState icon={Clock3} title={search ? 'No matching on-site visitors' : 'No visitors are currently on site'} description={search ? 'Try a different visitor name or destination.' : 'Newly admitted visitors will appear here immediately.'} />}
+      </section>
 
-      {}
-      {showForm && (
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-          <h3 className="text-sm font-bold text-slate-200 mb-4">New Visitor Entry</h3>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { key: 'visitorName', label: 'Visitor Name', placeholder: 'Full name', required: true },
-              { key: 'contactNumber', label: 'Contact Number', placeholder: '09XXXXXXXXX', required: true },
-              { key: 'purpose', label: 'Purpose of Visit', placeholder: 'e.g. Personal Visit, Delivery', required: true },
-              { key: 'destinationAddress', label: 'Destination Address', placeholder: 'Block & Lot / Homeowner Name', required: true },
-              { key: 'vehiclePlate', label: 'Vehicle Plate (Optional)', placeholder: 'e.g. ABC 1234', required: false },
-            ].map(f => (
-              <div key={f.key} className={f.key === 'destinationAddress' ? 'sm:col-span-2' : ''}>
-                <label className="block text-xs font-medium text-slate-400 mb-1">{f.label}</label>
-                <input
-                  type="text"
-                  required={f.required}
-                  placeholder={f.placeholder}
-                  value={form[f.key]}
-                  onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-700 border border-slate-600 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            ))}
-            <div className="sm:col-span-2 flex gap-2 pt-1">
-              <button type="submit" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">
-                Save Entry
-              </button>
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium transition">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-700 flex items-center gap-3">
-          <Search className="w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search by visitor name or destination..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="flex-1 bg-transparent text-xs text-slate-300 placeholder:text-slate-500 focus:outline-none"
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-700">
-                <th className="px-5 py-3">Visitor</th>
-                <th className="px-5 py-3">Purpose</th>
-                <th className="px-5 py-3">Destination</th>
-                <th className="px-5 py-3">Entry Time</th>
-                <th className="px-5 py-3">Exit Time</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/50">
-              {filtered.map(log => (
-                <tr key={log.id} className="hover:bg-slate-700/30 transition">
-                  <td className="px-5 py-3">
-                    <div className="font-medium text-slate-200">{log.visitorName}</div>
-                    <div className="text-slate-500">{log.contactNumber}</div>
-                  </td>
-                  <td className="px-5 py-3 text-slate-400">{log.purpose}</td>
-                  <td className="px-5 py-3 text-slate-400">{log.destinationAddress}</td>
-                  <td className="px-5 py-3 text-slate-400">{log.entryTime}</td>
-                  <td className="px-5 py-3 text-slate-500">{log.exitTime || '—'}</td>
-                  <td className="px-5 py-3">{statusBadge(log.exitTime)}</td>
-                  <td className="px-5 py-3">
-                    {!log.exitTime && (
-                      <button
-                        onClick={() => updateVisitorExit(log.id)}
-                        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-slate-700 hover:bg-amber-600/70 text-slate-300 hover:text-white transition"
-                      >
-                        <LogOut className="w-3 h-3" /> Log Exit
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-10 text-slate-500">No visitor logs found.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
-        <h3 className="text-sm font-bold text-slate-200 mb-3">Community Announcements</h3>
-        <div className="space-y-2">
-          {announcements.slice(0, 3).map(a => (
-            <div key={a.id} className="text-xs text-slate-400 px-3 py-2 rounded-xl bg-slate-700/50 border border-slate-700">
-              <span className="font-medium text-slate-300">{a.title}</span> · <span>{a.datePosted}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <section className="ui-surface overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4"><div><p className="ui-eyebrow">Community updates</p><h2 className="mt-1 text-base font-bold text-slate-100">Latest announcements</h2></div><button type="button" onClick={() => setActiveView('announcements')} className="flex items-center gap-1 text-xs font-bold text-blue-400 hover:text-blue-300">View all <ArrowRight className="h-4 w-4" /></button></div>
+        {announcements.length ? <div className="divide-y divide-slate-800">{announcements.slice(0, 3).map((announcement) => <article key={announcement.id} className="flex items-start gap-3 px-5 py-4"><span className="ui-icon-tile ui-icon-blue h-9 w-9 rounded-xl"><Bell className="h-4 w-4" /></span><div><p className="text-sm font-bold text-slate-200">{announcement.title}</p><p className="mt-1 text-xs text-slate-500">{announcement.datePosted}</p></div></article>)}</div> : <EmptyState icon={Bell} title="No current announcements" description="Published community notices will appear here." />}
+      </section>
     </div>
   );
 };

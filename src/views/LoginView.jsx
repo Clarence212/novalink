@@ -22,6 +22,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   });
   const [regStep, setRegStep] = useState(1);
   const [regOtp, setRegOtp] = useState('');
+  const [regVerificationToken, setRegVerificationToken] = useState('');
 
 
   const [forgotEmail, setForgotEmail] = useState('');
@@ -29,6 +30,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [resetVerificationToken, setResetVerificationToken] = useState('');
+  const [accountVerificationEmail, setAccountVerificationEmail] = useState('');
+  const [accountVerificationOtp, setAccountVerificationOtp] = useState('');
 
   const handleSignIn = async (e) => {
     e.preventDefault();
@@ -51,6 +54,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     e.preventDefault();
     try {
       await apiSendOtp(regData.email, regData.fullName || 'User', 'registration');
+      setRegVerificationToken('');
       setRegStep(2);
       showToast('Verification code sent to your email address.', 'info');
     } catch (error) {
@@ -61,10 +65,15 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const handleRegisterVerify = async (e) => {
     e.preventDefault();
     try {
-      const verification = await apiVerifyOtp(regData.email, regOtp, 'registration');
+      let verificationToken = regVerificationToken;
+      if (!verificationToken) {
+        const verification = await apiVerifyOtp(regData.email, regOtp, 'registration');
+        verificationToken = verification.verificationToken;
+        setRegVerificationToken(verificationToken);
+      }
       const result = await createUserAccount(
         { ...regData, role: 'resident' },
-        verification.verificationToken,
+        verificationToken,
       );
       if (!result.success) throw new Error(result.message || 'Registration failed.');
       showToast('Email verified successfully! Your account is pending NHAI Admin approval.', 'success');
@@ -72,6 +81,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
       setRegStep(1);
       setRegData({ fullName: '', email: '', blockLot: '', password: '' });
       setRegOtp('');
+      setRegVerificationToken('');
     } catch (error) {
       showToast(error.message || 'Invalid verification code entered.', 'warning');
     }
@@ -119,6 +129,20 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     setResetVerificationToken('');
   };
 
+  const handleExistingAccountVerification = async (event) => {
+    event.preventDefault();
+    try {
+      const result = await apiVerifyOtp(accountVerificationEmail, accountVerificationOtp, 'registration');
+      if (!result.accountVerified) throw new Error('This code is not for an existing account.');
+      showToast('Account email verified successfully. You may now sign in once the account is active.', 'success');
+      setActiveModal(null);
+      setAccountVerificationEmail('');
+      setAccountVerificationOtp('');
+    } catch (error) {
+      showToast(error.message || 'The verification code is invalid or expired.', 'warning');
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-slate-900">
       { }
@@ -131,9 +155,9 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-blue-400/20 blur-3xl pointer-events-none"></div>
 
           { }
-          <div className="relative z-10 space-y-6">
+          <div className="relative z-10 space-y-6 text-center flex flex-col items-center">
             <div className="mb-6">
-              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-36 h-36 lg:w-40 lg:h-40 object-contain drop-shadow-xl" />
+              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-36 h-36 lg:w-40 lg:h-40 object-contain drop-shadow-xl mx-auto" />
             </div>
 
             <div>
@@ -204,6 +228,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                   <input
                     type="email"
                     required
+                    autoComplete="email"
                     placeholder="your.email@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -219,6 +244,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete="current-password"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -228,6 +254,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -235,7 +263,14 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               </div>
 
               { }
-              <div className="flex items-center justify-end text-xs pt-1">
+              <div className="flex items-center justify-between gap-3 text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('verify-account')}
+                  className="text-blue-600 hover:text-blue-700 font-semibold text-xs transition"
+                >
+                  Verify account email
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveModal('forgot')}
@@ -284,13 +319,59 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       </div>
 
+      {/* EXISTING ACCOUNT EMAIL VERIFICATION MODAL */}
+      {activeModal === 'verify-account' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm" role="presentation">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800" role="dialog" aria-modal="true" aria-labelledby="verify-account-title">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <h3 id="verify-account-title" className="text-lg font-bold text-slate-900">Verify Existing Account Email</h3>
+              <button type="button" onClick={() => { setActiveModal(null); setAccountVerificationEmail(''); setAccountVerificationOtp(''); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleExistingAccountVerification} className="space-y-3 text-xs">
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 flex items-start gap-2">
+                <Mail className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
+                <span>Use the six-digit account-verification code sent by an NHAI administrator. Codes expire after 15 minutes.</span>
+              </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Account Email</label>
+                <input
+                  type="email"
+                  required
+                  value={accountVerificationEmail}
+                  onChange={(event) => setAccountVerificationEmail(event.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Verification Code</label>
+                <input
+                  type="text"
+                  required
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  minLength={6}
+                  maxLength={6}
+                  value={accountVerificationOtp}
+                  onChange={(event) => setAccountVerificationOtp(event.target.value)}
+                  placeholder="6-digit code"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition">Verify Account Email</button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* REGISTRATION MODAL */}
       {activeModal === 'register' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm" role="presentation">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800" role="dialog" aria-modal="true" aria-labelledby="registration-title">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Resident Account Registration</h3>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-600">
+              <h3 id="registration-title" className="text-lg font-bold text-slate-900">Resident Account Registration</h3>
+              <button onClick={() => { setActiveModal(null); setRegStep(1); setRegData({ fullName: '', email: '', blockLot: '', password: '' }); setRegOtp(''); setRegVerificationToken(''); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -356,9 +437,9 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               <form onSubmit={handleRegisterVerify} className="space-y-3 text-xs">
                 <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
                   <Mail className="w-4 h-4 shrink-0 text-blue-600" />
-                  <span>Verification code sent to <strong>{regData.email}</strong>. Please check your inbox.</span>
+                  <span>{regVerificationToken ? 'Email verified. If the office corrected your homeowner record, retry the registration below.' : <>Verification code sent to <strong>{regData.email}</strong>. Please check your inbox.</>}</span>
                 </div>
-                <div>
+                {!regVerificationToken && <div>
                   <label className="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
                   <input
                     type="text"
@@ -372,13 +453,22 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     onChange={(e) => setRegOtp(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
                   />
-                </div>
+                </div>}
                 <button
                   type="submit"
                   className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
                 >
-                  Verify & Submit Registration
+                  {regVerificationToken ? 'Retry Registration' : 'Verify & Submit Registration'}
                 </button>
+                {regVerificationToken && (
+                  <button
+                    type="button"
+                    onClick={() => { setRegStep(1); setRegOtp(''); setRegVerificationToken(''); }}
+                    className="w-full py-2.5 rounded-xl border border-slate-300 hover:border-blue-500 text-slate-600 hover:text-blue-700 font-semibold text-xs transition"
+                  >
+                    Start Over & Request a New Code
+                  </button>
+                )}
               </form>
             )}
           </div>
@@ -387,10 +477,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       {/* FORGOT PASSWORD MODAL */}
       {activeModal === 'forgot' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm" role="presentation">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800" role="dialog" aria-modal="true" aria-labelledby="password-reset-title">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Reset Account Password</h3>
+              <h3 id="password-reset-title" className="text-lg font-bold text-slate-900">Reset Account Password</h3>
               <button onClick={() => { setActiveModal(null); setForgotStep(1); setForgotEmail(''); setForgotOtp(''); setNewPassword(''); setResetVerificationToken(''); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>

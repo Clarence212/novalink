@@ -33,5 +33,66 @@ jobs:
       - name: Lint PHP backend
         run: find backend -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Validate operational shell scripts
+        run: find backend deploy -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
       - name: Build production frontend
         run: npm run build
+
+  mariadb-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mariadb:
+        image: mariadb:10.5.29
+        env:
+          MARIADB_ROOT_PASSWORD: novalink-root-ci
+          MARIADB_DATABASE: novalink_ci
+          MARIADB_USER: novalink_ci
+          MARIADB_PASSWORD: novalink-ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pnovalink-root-ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      NOVALINK_APP_ENV: testing
+      NOVALINK_APP_ORIGIN: http://127.0.0.1:8080
+      NOVALINK_SESSION_NAME: novalink_ci_session
+      NOVALINK_DB_HOST: 127.0.0.1
+      NOVALINK_DB_PORT: 3306
+      NOVALINK_DB_NAME: novalink_ci
+      NOVALINK_DB_USER: novalink_ci
+      NOVALINK_DB_PASS: novalink-ci-password
+      NOVALINK_SYSTEM_EMAIL: ci@example.test
+      NOVALINK_BREVO_API_KEY: ''
+      NOVALINK_ERROR_LOG_PATH: /tmp/novalink-ci-errors.jsonl
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP integration runtime
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, curl, mbstring, fileinfo
+          coverage: none
+
+      - name: Verify PHP integration extensions
+        run: |
+          php -m | grep -qi '^pdo_mysql$'
+          php -m | grep -qi '^curl$'
+          php -m | grep -qi '^fileinfo$'
+
+      - name: Run MariaDB and API integration suite
+        run: bash backend/tests/run_ci_integration.sh
+
+      - name: Show structured errors on failure
+        if: failure()
+        run: |
+          test ! -f /tmp/novalink-ci-errors.jsonl || tail -100 /tmp/novalink-ci-errors.jsonl

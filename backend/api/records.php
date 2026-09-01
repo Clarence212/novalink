@@ -38,6 +38,37 @@ function fetch_row(PDO $pdo, string $sql, array $params): ?array
     return $row ?: null;
 }
 
+function required_audit_log(
+    PDO $pdo,
+    ?string $actorId,
+    string $action,
+    string $entityType,
+    ?string $entityId,
+    mixed $before = null,
+    mixed $after = null
+): void {
+    $statement = $pdo->prepare(
+        'INSERT INTO audit_logs
+         (actor_user_id, action_name, entity_type, entity_id, before_json, after_json, ip_address, user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $statement->execute([
+        $actorId,
+        $action,
+        $entityType,
+        $entityId,
+        $before === null ? null : json_encode($before, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        $after === null ? null : json_encode($after, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        client_ip(),
+        substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+    ]);
+}
+
+function normalized_block_lot(string $value): string
+{
+    return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', trim($value)));
+}
+
 function require_iso_date(array $input, string $key): string
 {
     $value = required_string($input, $key, 10, $key);
@@ -79,6 +110,126 @@ function create_sticker_number(PDO $pdo, string $period): string
         }
     }
     throw new RuntimeException('Could not generate a unique sticker number.');
+}
+
+function create_visitor_pass_code(PDO $pdo): string
+{
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for ($attempt = 0; $attempt < 12; $attempt++) {
+        $suffix = '';
+        for ($index = 0; $index < 8; $index++) {
+            $suffix .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+        $code = 'NVL-' . $suffix;
+        $check = $pdo->prepare('SELECT visitor_pass_id FROM visitor_passes WHERE pass_code = ? LIMIT 1');
+        $check->execute([$code]);
+        if (!$check->fetch()) {
+            return $code;
+        }
+    }
+    throw new RuntimeException('A unique visitor pass could not be generated.');
+}
+
+function required_visitor_pass_code(array $input): string
+{
+    $code = strtoupper(required_string($input, 'passCode', 20, 'Visitor pass code'));
+    $code = preg_replace('/\s+/', '', $code) ?? '';
+    if (!preg_match('/^NVL-[A-HJ-NP-Z2-9]{8}$/', $code)) {
+        json_response(['error' => 'Enter a valid visitor pass code in the format NVL-XXXXXXXX.'], 422);
+    }
+    return $code;
+}
+
+function payment_amount_cents(mixed $value): int
+{
+    if (!is_numeric($value)) {
+        json_response(['error' => 'Enter a valid payment amount.'], 422);
+    }
+    $cents = (int) round((float) $value * 100);
+    if ($cents <= 0 || $cents > 100_000_000) {
+        json_response(['error' => 'Enter a valid payment amount.'], 422);
+    }
+    return $cents;
+}
+
+function store_payment_proof(): array
+{
+    if (!isset($_FILES['proof']) || $_FILES['proof']['error'] !== UPLOAD_ERR_OK) {
+        json_response(['error' => 'A payment-proof image is required.'], 422);
+    }
+    $file = $_FILES['proof'];
+    if ((int) $file['size'] <= 0 || (int) $file['size'] > 5_242_880) {
+        json_response(['error' => 'Payment proof must be no larger than 5 MB.'], 422);
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = (string) $finfo->file($file['tmp_name']);
+    $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    if (!isset($extensions[$mime])) {
+        json_response(['error' => 'Payment proof must be a JPEG, PNG, or WebP image.'], 422);
+    }
+    $storage = __DIR__ . '/../storage/payment-proofs';
+    if (!is_dir($storage) && !mkdir($storage, 0750, true) && !is_dir($storage)) {
+        throw new RuntimeException('Payment-proof storage is unavailable.');
+    }
+    $storedName = bin2hex(random_bytes(24)) . '.' . $extensions[$mime];
+    $target = $storage . '/' . $storedName;
+    if (!move_uploaded_file($file['tmp_name'], $target)) {
+        throw new RuntimeException('Payment proof could not be stored.');
+    }
+    return [
+        'storedName' => $storedName,
+        'originalName' => basename((string) $file['name']),
+        'mime' => $mime,
+        'size' => (int) $file['size'],
+        'target' => $target,
+    ];
+}
+
+function allocate_payment_credit(PDO $pdo, string $paymentId, string $homeownerId, int $creditCents): array
+{
+    $dues = $pdo->prepare(
+        "SELECT dues_id, amount_due, penalty_amount FROM dues
+         WHERE homeowner_id = ? AND status = 'unpaid' ORDER BY billing_month FOR UPDATE"
+    );
+    $dues->execute([$homeownerId]);
+    $allocated = $pdo->prepare(
+        'SELECT COALESCE(SUM(amount_applied), 0) FROM payment_allocations WHERE dues_id = ?'
+    );
+    $allocation = $pdo->prepare(
+        'INSERT INTO payment_allocations (allocation_id, payment_id, dues_id, amount_applied)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE amount_applied = amount_applied + VALUES(amount_applied)'
+    );
+    $markPaid = $pdo->prepare("UPDATE dues SET status = 'paid' WHERE dues_id = ?");
+    $remainingCents = $creditCents;
+    $paidCount = 0;
+    $allocationCount = 0;
+    foreach ($dues->fetchAll() as $due) {
+        if ($remainingCents <= 0) {
+            break;
+        }
+        $allocated->execute([$due['dues_id']]);
+        $requiredCents = max(0, (int) round(
+            ((float) $due['amount_due'] + (float) $due['penalty_amount'] - (float) $allocated->fetchColumn()) * 100
+        ));
+        if ($requiredCents <= 0) {
+            $markPaid->execute([$due['dues_id']]);
+            continue;
+        }
+        $appliedCents = min($remainingCents, $requiredCents);
+        $allocation->execute([uuid_v4(), $paymentId, $due['dues_id'], $appliedCents / 100]);
+        $allocationCount++;
+        if ($appliedCents >= $requiredCents) {
+            $markPaid->execute([$due['dues_id']]);
+            $paidCount++;
+        }
+        $remainingCents -= $appliedCents;
+    }
+    return [
+        'remainingCents' => $remainingCents,
+        'paidCount' => $paidCount,
+        'allocationCount' => $allocationCount,
+    ];
 }
 
 try {
@@ -147,21 +298,50 @@ try {
         if ($action === 'status') {
             $id = required_string($input, 'id', 36, 'User ID');
             $status = require_choice($input, 'status', ['active', 'rejected', 'inactive']);
+            $reason = $status === 'active' ? null : required_string($input, 'reason', 500, 'Reason');
             if ($id === $actor['id'] && $status !== 'active') {
                 json_response(['error' => 'You cannot deactivate your own active session.'], 422);
             }
-            $before = fetch_row($pdo, 'SELECT user_id AS id, email, full_name AS fullName, account_status AS status FROM users WHERE user_id = ?', [$id]);
-            if (!$before) {
-                json_response(['error' => 'User not found.'], 404);
+
+            $pdo->beginTransaction();
+            try {
+                $before = fetch_row(
+                    $pdo,
+                    "SELECT u.user_id AS id, u.email, u.full_name AS fullName,
+                            u.account_status AS status, r.role_name AS role
+                     FROM users u JOIN roles r ON r.role_id = u.role_id
+                     WHERE u.user_id = ? LIMIT 1 FOR UPDATE",
+                    [$id]
+                );
+                if (!$before) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'User not found.'], 404);
+                }
+                if ($before['role'] === 'admin' && $before['status'] === 'active' && $status !== 'active') {
+                    $activeAdmins = $pdo->query(
+                        "SELECT u.user_id FROM users u JOIN roles r ON r.role_id = u.role_id
+                         WHERE r.role_name = 'admin' AND u.account_status = 'active' FOR UPDATE"
+                    )->fetchAll();
+                    if (count($activeAdmins) <= 1) {
+                        $pdo->rollBack();
+                        json_response(['error' => 'The last active administrator cannot be deactivated or rejected.'], 422);
+                    }
+                }
+                $update = $pdo->prepare(
+                    'UPDATE users SET account_status = ?, approved_by_user_id = ?, approved_at = CASE WHEN ? = \'active\' THEN UTC_TIMESTAMP() ELSE approved_at END WHERE user_id = ?'
+                );
+                $update->execute([$status, $actor['id'], $status, $id]);
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
             }
-            $update = $pdo->prepare(
-                'UPDATE users SET account_status = ?, approved_by_user_id = ?, approved_at = CASE WHEN ? = \'active\' THEN UTC_TIMESTAMP() ELSE approved_at END WHERE user_id = ?'
-            );
-            $update->execute([$status, $actor['id'], $status, $id]);
-            audit_log($pdo, $actor['id'], 'user.status', 'user', $id, $before, ['status' => $status]);
+            audit_log($pdo, $actor['id'], 'user.status', 'user', $id, $before, ['status' => $status, 'reason' => $reason]);
             $mailSent = safe_notification(
                 $pdo, $before['email'], $before['fullName'], 'NovaLink account status updated',
-                "Your NovaLink account status is now {$status}. Contact the NHAI office if you have questions.",
+                "Your NovaLink account status is now {$status}." . ($reason ? " Reason: {$reason}" : '') . ' Contact the NHAI office if you have questions.',
                 'account_status'
             );
             json_response(['success' => true, 'emailDelivered' => $mailSent]);
@@ -173,6 +353,8 @@ try {
             $email = normalize_email($input['email'] ?? '');
             $role = require_choice($input, 'role', ['admin', 'security', 'resident']);
             $homeownerId = optional_string($input, 'homeownerId', 36);
+            $confirmRoleChange = ($input['confirmRoleChange'] ?? false) === true;
+            $confirmAccessChange = ($input['confirmAccessChange'] ?? false) === true;
             if ($id === $actor['id'] && $role !== 'admin') {
                 json_response(['error' => 'You cannot remove your own administrator role.'], 422);
             }
@@ -180,14 +362,57 @@ try {
                 json_response(['error' => 'Resident accounts must be linked to a homeowner record.'], 422);
             }
             $roleMap = ['admin' => 1, 'security' => 2, 'resident' => 3];
-            $before = fetch_row($pdo, 'SELECT user_id AS id, full_name AS fullName, email, role_id AS roleId FROM users WHERE user_id = ?', [$id]);
-            if (!$before) {
-                json_response(['error' => 'User not found.'], 404);
-            }
             $pdo->beginTransaction();
             try {
-                $update = $pdo->prepare('UPDATE users SET full_name = ?, email = ?, role_id = ? WHERE user_id = ?');
-                $update->execute([$fullName, $email, $roleMap[$role], $id]);
+                $before = fetch_row(
+                    $pdo,
+                    "SELECT u.user_id AS id, u.full_name AS fullName, u.email,
+                            u.role_id AS roleId, r.role_name AS role, u.account_status AS status,
+                            h.homeowner_id AS homeownerId
+                     FROM users u JOIN roles r ON r.role_id = u.role_id
+                     LEFT JOIN homeowners h ON h.user_id = u.user_id AND h.record_status = 'active'
+                     WHERE u.user_id = ? LIMIT 1 FOR UPDATE",
+                    [$id]
+                );
+                if (!$before) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'User not found.'], 404);
+                }
+                $roleChanged = $before['role'] !== $role;
+                if ($roleChanged && !$confirmRoleChange) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Confirm the role change explicitly before saving.'], 422);
+                }
+                $homeownerChanged = $role === 'resident'
+                    && (string) ($before['homeownerId'] ?? '') !== (string) $homeownerId;
+                if ($homeownerChanged && !$confirmAccessChange) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Confirm the homeowner-link change explicitly before saving.'], 422);
+                }
+                if ($roleChanged && $before['role'] === 'admin' && $before['status'] === 'active') {
+                    $activeAdmins = $pdo->query(
+                        "SELECT u.user_id FROM users u JOIN roles r ON r.role_id = u.role_id
+                         WHERE r.role_name = 'admin' AND u.account_status = 'active' FOR UPDATE"
+                    )->fetchAll();
+                    if (count($activeAdmins) <= 1) {
+                        $pdo->rollBack();
+                        json_response(['error' => 'The last active administrator cannot be assigned another role.'], 422);
+                    }
+                }
+                $duplicate = fetch_row($pdo, 'SELECT user_id AS id FROM users WHERE email = ? AND user_id <> ? LIMIT 1', [$email, $id]);
+                if ($duplicate) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Another account already uses this email address.'], 409);
+                }
+                $emailChanged = strcasecmp((string) $before['email'], $email) !== 0;
+                $update = $pdo->prepare(
+                    'UPDATE users
+                     SET full_name = ?, email = ?, role_id = ?,
+                         email_verified = CASE WHEN ? = 1 THEN 0 ELSE email_verified END,
+                         email_verified_at = CASE WHEN ? = 1 THEN NULL ELSE email_verified_at END
+                     WHERE user_id = ?'
+                );
+                $update->execute([$fullName, $email, $roleMap[$role], $emailChanged ? 1 : 0, $emailChanged ? 1 : 0, $id]);
                 $pdo->prepare('UPDATE homeowners SET user_id = NULL WHERE user_id = ?')->execute([$id]);
                 if ($role === 'resident') {
                     $link = $pdo->prepare("UPDATE homeowners SET user_id = ? WHERE homeowner_id = ? AND user_id IS NULL AND record_status = 'active'");
@@ -199,9 +424,449 @@ try {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 throw $error;
             }
-            audit_log($pdo, $actor['id'], 'user.update', 'user', $id, $before, ['fullName' => $fullName, 'email' => $email, 'role' => $role]);
+            audit_log($pdo, $actor['id'], 'user.update', 'user', $id, $before, [
+                'fullName' => $fullName,
+                'email' => $email,
+                'role' => $role,
+                'homeownerId' => $role === 'resident' ? $homeownerId : null,
+                'homeownerLinkChanged' => $homeownerChanged,
+                'emailVerificationRequired' => $emailChanged,
+            ]);
+            $response = ['success' => true];
+            if ($roleChanged || $emailChanged) {
+                $changes = [];
+                if ($roleChanged) {
+                    $changes[] = "Your NovaLink role is now {$role}.";
+                }
+                if ($emailChanged) {
+                    $changes[] = 'Your account email was changed and must be verified before your next sign-in. Ask an NHAI administrator to send the verification code, then use Verify Account Email on the sign-in page.';
+                }
+                $response['emailDelivered'] = safe_notification(
+                    $pdo,
+                    $email,
+                    $fullName,
+                    'NovaLink account access updated',
+                    implode("\n\n", $changes),
+                    'account_access_updated'
+                );
+            }
+            json_response($response);
+        }
+
+        if ($action === 'unlock') {
+            $id = required_string($input, 'id', 36, 'User ID');
+            $before = fetch_row(
+                $pdo,
+                'SELECT user_id AS id, email, full_name AS fullName, failed_login_attempts AS failedLoginAttempts, locked_until AS lockedUntil FROM users WHERE user_id = ? LIMIT 1',
+                [$id]
+            );
+            if (!$before) {
+                json_response(['error' => 'User not found.'], 404);
+            }
+            $update = $pdo->prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?');
+            $update->execute([$id]);
+            $loginRateAction = 'login:' . substr(hash('sha256', (string) $before['email']), 0, 32);
+            $clearLoginThrottle = $pdo->prepare('DELETE FROM rate_limits WHERE action_name = ?');
+            $clearLoginThrottle->execute([$loginRateAction]);
+            audit_log($pdo, $actor['id'], 'user.unlock', 'user', $id, $before, [
+                'failedLoginAttempts' => 0,
+                'lockedUntil' => null,
+                'loginRateLimitCleared' => true,
+            ]);
             json_response(['success' => true]);
         }
+
+        if ($action === 'force-password-reset') {
+            $id = required_string($input, 'id', 36, 'User ID');
+            if ($id === $actor['id']) {
+                json_response(['error' => 'Use Change Password to update your own administrator password.'], 422);
+            }
+            $before = fetch_row(
+                $pdo,
+                'SELECT user_id AS id, email, full_name AS fullName, force_password_change AS forcePasswordChange FROM users WHERE user_id = ? LIMIT 1',
+                [$id]
+            );
+            if (!$before) {
+                json_response(['error' => 'User not found.'], 404);
+            }
+            $update = $pdo->prepare('UPDATE users SET force_password_change = 1 WHERE user_id = ?');
+            $update->execute([$id]);
+            audit_log($pdo, $actor['id'], 'user.force_password_reset', 'user', $id, $before, ['forcePasswordChange' => true]);
+            $mailSent = safe_notification(
+                $pdo,
+                $before['email'],
+                $before['fullName'],
+                'NovaLink password change required',
+                'An NHAI administrator has required a password change on your account. Sign in with your current password and NovaLink will ask you to set a new private password. If you no longer know your password, use Forgot Password on the sign-in page.',
+                'password_change_required'
+            );
+            json_response(['success' => true, 'emailDelivered' => $mailSent]);
+        }
+
+        if ($action === 'resend-verification') {
+            $id = required_string($input, 'id', 36, 'User ID');
+            $userAccount = fetch_row(
+                $pdo,
+                'SELECT user_id AS id, email, full_name AS fullName, email_verified AS emailVerified FROM users WHERE user_id = ? LIMIT 1',
+                [$id]
+            );
+            if (!$userAccount) {
+                json_response(['error' => 'User not found.'], 404);
+            }
+            if ((bool) $userAccount['emailVerified']) {
+                json_response(['error' => 'This account email is already verified.'], 409);
+            }
+            $recent = $pdo->prepare(
+                "SELECT COUNT(*) FROM email_verification_tokens
+                 WHERE email = ? AND purpose = 'registration'
+                   AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE)"
+            );
+            $recent->execute([$userAccount['email']]);
+            if ((int) $recent->fetchColumn() >= 3) {
+                json_response(['error' => 'Too many verification emails were sent recently. Wait 15 minutes before trying again.'], 429);
+            }
+
+            $code = (string) random_int(100000, 999999);
+            $tokenId = uuid_v4();
+            $pdo->beginTransaction();
+            try {
+                $consumeOld = $pdo->prepare(
+                    "UPDATE email_verification_tokens SET consumed_at = UTC_TIMESTAMP()
+                     WHERE email = ? AND purpose = 'registration' AND consumed_at IS NULL"
+                );
+                $consumeOld->execute([$userAccount['email']]);
+                $insert = $pdo->prepare(
+                    "INSERT INTO email_verification_tokens
+                     (token_id, email, full_name, purpose, code_hash, expires_at)
+                     VALUES (?, ?, ?, 'registration', ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))"
+                );
+                $insert->execute([
+                    $tokenId,
+                    $userAccount['email'],
+                    $userAccount['fullName'],
+                    password_hash($code, PASSWORD_DEFAULT),
+                ]);
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+
+            try {
+                $mailResult = (new EmailService($pdo))->sendOtpEmail(
+                    $userAccount['email'],
+                    $userAccount['fullName'],
+                    $code,
+                    'Account Email Verification'
+                );
+                $mailSent = (bool) ($mailResult['success'] ?? false);
+            } catch (Throwable $error) {
+                error_log('NovaLink account verification email failure: ' . $error->getMessage());
+                $mailSent = false;
+            }
+            if (!$mailSent) {
+                $pdo->prepare('UPDATE email_verification_tokens SET consumed_at = UTC_TIMESTAMP() WHERE token_id = ?')->execute([$tokenId]);
+                json_response(['error' => 'Verification email could not be delivered. No active code was left behind.'], 502);
+            }
+
+            audit_log($pdo, $actor['id'], 'user.verification_resent', 'user', $id, null, [
+                'email' => $userAccount['email'],
+                'verificationTokenId' => $tokenId,
+            ]);
+            json_response(['success' => true, 'emailDelivered' => true]);
+        }
+    }
+
+    if ($resource === 'reconciliation') {
+        $actor = require_auth($pdo, ['admin']);
+
+        if ($action === 'resolve-registration') {
+            $tokenId = required_string($input, 'tokenId', 36, 'Registration request ID');
+            $homeownerId = required_string($input, 'homeownerId', 36, 'Homeowner ID');
+            $ownerName = required_string($input, 'ownerName', 120, 'Owner name');
+            $blockLot = required_string($input, 'blockLot', 100, 'Block and lot');
+            $contactNumber = required_string($input, 'contactNumber', 30, 'Contact number');
+            $identityConfirmed = ($input['identityConfirmed'] ?? false) === true;
+            if (!$identityConfirmed) {
+                json_response(['error' => 'Confirm that the resident was checked against the official NHAI master record.'], 422);
+            }
+            $blockLotKey = normalized_block_lot($blockLot);
+            if ($blockLotKey === '') {
+                json_response(['error' => 'Block and lot must contain letters or numbers.'], 422);
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $request = fetch_row(
+                    $pdo,
+                    "SELECT token_id AS tokenId, email, full_name AS fullName,
+                            contact_number AS contactNumber, verified_at AS verifiedAt,
+                            consumed_at AS consumedAt, expires_at AS expiresAt
+                     FROM email_verification_tokens
+                     WHERE token_id = ? AND purpose = 'registration'
+                     LIMIT 1 FOR UPDATE",
+                    [$tokenId]
+                );
+                if (!$request || !$request['verifiedAt'] || $request['consumedAt']) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'This verified registration request is no longer available.'], 409);
+                }
+
+                $alreadyReconciled = fetch_row(
+                    $pdo,
+                    "SELECT audit_id AS id FROM audit_logs
+                     WHERE action_name = 'registration.reconcile'
+                       AND JSON_UNQUOTE(JSON_EXTRACT(after_json, '$.registrationTokenId')) = ?
+                     LIMIT 1 FOR UPDATE",
+                    [$tokenId]
+                );
+                if ($alreadyReconciled) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'This registration request was already reconciled. Refresh the page.'], 409);
+                }
+
+                $email = normalize_email($request['email']);
+                $existingUser = fetch_row($pdo, 'SELECT user_id FROM users WHERE email = ? LIMIT 1', [$email]);
+                if ($existingUser) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'An account already exists for this verified email address.'], 409);
+                }
+
+                $homeowner = fetch_row(
+                    $pdo,
+                    "SELECT homeowner_id AS id, user_id AS userId, owner_name AS ownerName,
+                            block_lot AS blockLot, contact_number AS contactNumber, email
+                     FROM homeowners
+                     WHERE homeowner_id = ? AND record_status = 'active'
+                     LIMIT 1 FOR UPDATE",
+                    [$homeownerId]
+                );
+                if (!$homeowner) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'The selected active homeowner record was not found.'], 404);
+                }
+                if ($homeowner['userId']) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'The selected homeowner record is already linked to an account.'], 409);
+                }
+
+                $emailOwner = fetch_row(
+                    $pdo,
+                    "SELECT homeowner_id AS id
+                     FROM homeowners
+                     WHERE email = ? AND homeowner_id <> ? AND record_status = 'active'
+                     LIMIT 1 FOR UPDATE",
+                    [$email, $homeownerId]
+                );
+                if ($emailOwner) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Another active homeowner record already uses this verified email address. Resolve that duplicate first.'], 409);
+                }
+
+                $blockLotOwner = fetch_row(
+                    $pdo,
+                    "SELECT homeowner_id AS id
+                     FROM homeowners
+                     WHERE REGEXP_REPLACE(LOWER(block_lot), '[^a-z0-9]', '') = ?
+                       AND homeowner_id <> ? AND record_status = 'active'
+                     LIMIT 1 FOR UPDATE",
+                    [$blockLotKey, $homeownerId]
+                );
+                if ($blockLotOwner) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Another active homeowner record already uses this block/lot. Resolve that duplicate first.'], 409);
+                }
+
+                $update = $pdo->prepare(
+                    'UPDATE homeowners SET owner_name = ?, email = ?, block_lot = ?, contact_number = ? WHERE homeowner_id = ?'
+                );
+                $update->execute([$ownerName, $email, $blockLot, $contactNumber, $homeownerId]);
+                $after = [
+                    'registrationTokenId' => $tokenId,
+                    'ownerName' => $ownerName,
+                    'email' => $email,
+                    'blockLot' => $blockLot,
+                    'contactNumber' => $contactNumber,
+                    'identityConfirmed' => true,
+                ];
+                required_audit_log(
+                    $pdo,
+                    $actor['id'],
+                    'registration.reconcile',
+                    'homeowner',
+                    $homeownerId,
+                    $homeowner,
+                    $after
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+
+            json_response([
+                'success' => true,
+                'tokenActive' => strtotime((string) $request['expiresAt']) > time(),
+                'message' => 'Homeowner master record aligned with the verified registration request.',
+            ]);
+        }
+
+        if ($action === 'link-user') {
+            $userId = required_string($input, 'userId', 36, 'User ID');
+            $homeownerId = required_string($input, 'homeownerId', 36, 'Homeowner ID');
+            $emailResolution = require_choice($input, 'emailResolution', ['match', 'update-homeowner', 'keep-different']);
+            $identityConfirmed = ($input['identityConfirmed'] ?? false) === true;
+            if (!$identityConfirmed) {
+                json_response(['error' => 'Confirm that the account owner was checked against official NHAI records.'], 422);
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $userAccount = fetch_row(
+                    $pdo,
+                    "SELECT u.user_id AS id, u.full_name AS fullName, u.email,
+                            u.account_status AS status, u.email_verified AS emailVerified,
+                            r.role_name AS role
+                     FROM users u
+                     JOIN roles r ON r.role_id = u.role_id
+                     WHERE u.user_id = ? LIMIT 1 FOR UPDATE",
+                    [$userId]
+                );
+                if (!$userAccount) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'User account not found.'], 404);
+                }
+                if ($userAccount['role'] !== 'resident') {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Only resident accounts can be linked to homeowner records.'], 422);
+                }
+                if ($userAccount['status'] === 'rejected') {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Reactivate the rejected resident account before linking it.'], 422);
+                }
+                if (!(bool) $userAccount['emailVerified']) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Verify the resident account email before linking a homeowner record.'], 422);
+                }
+
+                $existingLink = fetch_row(
+                    $pdo,
+                    'SELECT homeowner_id AS id FROM homeowners WHERE user_id = ? LIMIT 1 FOR UPDATE',
+                    [$userId]
+                );
+                if ($existingLink) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'This resident account is already linked to a homeowner record.'], 409);
+                }
+
+                $homeowner = fetch_row(
+                    $pdo,
+                    "SELECT homeowner_id AS id, user_id AS userId, owner_name AS ownerName,
+                            block_lot AS blockLot, email
+                     FROM homeowners
+                     WHERE homeowner_id = ? AND record_status = 'active'
+                     LIMIT 1 FOR UPDATE",
+                    [$homeownerId]
+                );
+                if (!$homeowner) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'The selected active homeowner record was not found.'], 404);
+                }
+                if ($homeowner['userId']) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'The selected homeowner record is already linked to another account.'], 409);
+                }
+
+                $emailMatches = strcasecmp(trim((string) $userAccount['email']), trim((string) $homeowner['email'])) === 0;
+                if ($emailMatches && $emailResolution !== 'match') {
+                    $pdo->rollBack();
+                    json_response(['error' => 'The account and homeowner emails already match. Refresh the page and try again.'], 422);
+                }
+                if (!$emailMatches && $emailResolution === 'match') {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Choose how the mismatched emails should be handled before linking.'], 422);
+                }
+
+                $homeownerEmailAfter = (string) $homeowner['email'];
+                if (!$emailMatches && $emailResolution === 'update-homeowner') {
+                    $emailOwner = fetch_row(
+                        $pdo,
+                        "SELECT homeowner_id AS id FROM homeowners
+                         WHERE email = ? AND homeowner_id <> ? AND record_status = 'active'
+                         LIMIT 1 FOR UPDATE",
+                        [$userAccount['email'], $homeownerId]
+                    );
+                    if ($emailOwner) {
+                        $pdo->rollBack();
+                        json_response(['error' => 'Another active homeowner record already uses the account email. Resolve that duplicate first.'], 409);
+                    }
+                    $updateEmail = $pdo->prepare('UPDATE homeowners SET email = ? WHERE homeowner_id = ?');
+                    $updateEmail->execute([$userAccount['email'], $homeownerId]);
+                    $homeownerEmailAfter = (string) $userAccount['email'];
+                }
+
+                $link = $pdo->prepare(
+                    "UPDATE homeowners SET user_id = ?
+                     WHERE homeowner_id = ? AND user_id IS NULL AND record_status = 'active'"
+                );
+                $link->execute([$userId, $homeownerId]);
+                if ($link->rowCount() !== 1) {
+                    throw new RuntimeException('The homeowner record was linked by another request.');
+                }
+                $linkAudit = [
+                    'userId' => $userId,
+                    'accountEmail' => $userAccount['email'],
+                    'homeownerEmailBefore' => $homeowner['email'],
+                    'homeownerEmailAfter' => $homeownerEmailAfter,
+                    'emailResolution' => $emailMatches ? 'match' : $emailResolution,
+                    'identityConfirmed' => true,
+                ];
+                required_audit_log(
+                    $pdo,
+                    $actor['id'],
+                    'homeowner.link_user',
+                    'homeowner',
+                    $homeownerId,
+                    $homeowner,
+                    $linkAudit
+                );
+                required_audit_log(
+                    $pdo,
+                    $actor['id'],
+                    'user.homeowner_linked',
+                    'user',
+                    $userId,
+                    ['homeownerId' => null],
+                    ['homeownerId' => $homeownerId, 'emailResolution' => $linkAudit['emailResolution']]
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+
+            $mailSent = safe_notification(
+                $pdo,
+                $userAccount['email'],
+                $userAccount['fullName'],
+                'NovaLink homeowner record linked',
+                "Your resident account was linked to the NHAI homeowner record for {$homeowner['ownerName']} at {$homeowner['blockLot']}. Contact the NHAI office immediately if this is incorrect.",
+                'homeowner_linked'
+            );
+            json_response([
+                'success' => true,
+                'message' => 'Resident account linked to the homeowner record.',
+                'emailDelivered' => $mailSent,
+            ]);
+        }
+
+        json_response(['error' => 'Invalid reconciliation action.'], 400);
     }
 
     if ($resource === 'homeowners') {
@@ -273,27 +938,218 @@ try {
             $purpose = required_string($input, 'purpose', 120, 'Purpose');
             $destination = required_string($input, 'destinationAddress', 190, 'Destination address');
             $plate = optional_string($input, 'vehiclePlate', 30);
-            $insert = $pdo->prepare(
-                'INSERT INTO visitor_logs
-                 (visitor_log_id, visitor_name, contact_number, purpose, destination_address, vehicle_plate, recorded_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
-            );
-            $insert->execute([$id, $visitorName, $contactNumber, $purpose, $destination, $plate, $actor['id']]);
-            audit_log($pdo, $actor['id'], 'visitor.create', 'visitor_log', $id, null, ['visitorName' => $visitorName]);
+            $pdo->beginTransaction();
+            try {
+                $insert = $pdo->prepare(
+                    'INSERT INTO visitor_logs
+                     (visitor_log_id, visitor_name, contact_number, purpose, destination_address, vehicle_plate, recorded_by_user_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)'
+                );
+                $insert->execute([$id, $visitorName, $contactNumber, $purpose, $destination, $plate, $actor['id']]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'visitor.create', 'visitor_log', $id, null,
+                    ['visitorName' => $visitorName, 'entrySource' => 'gate_entry']
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
             json_response(['success' => true, 'id' => $id], 201);
         }
         if ($action === 'exit') {
             $id = required_string($input, 'id', 36, 'Visitor log ID');
-            $update = $pdo->prepare(
-                'UPDATE visitor_logs SET exit_time = UTC_TIMESTAMP(), updated_by_user_id = ? WHERE visitor_log_id = ? AND exit_time IS NULL'
-            );
-            $update->execute([$actor['id'], $id]);
-            if ($update->rowCount() !== 1) {
-                json_response(['error' => 'Active visitor entry not found.'], 404);
+            $pdo->beginTransaction();
+            try {
+                $entry = fetch_row(
+                    $pdo,
+                    'SELECT visitor_log_id, visitor_name, entry_time FROM visitor_logs
+                     WHERE visitor_log_id = ? AND exit_time IS NULL FOR UPDATE',
+                    [$id]
+                );
+                if (!$entry) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Active visitor entry not found.'], 404);
+                }
+                $update = $pdo->prepare(
+                    'UPDATE visitor_logs SET exit_time = UTC_TIMESTAMP(), updated_by_user_id = ? WHERE visitor_log_id = ?'
+                );
+                $update->execute([$actor['id'], $id]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'visitor.exit', 'visitor_log', $id,
+                    ['exitTime' => null], ['exitTime' => gmdate('Y-m-d H:i:s')]
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
             }
-            audit_log($pdo, $actor['id'], 'visitor.exit', 'visitor_log', $id);
             json_response(['success' => true]);
         }
+        json_response(['error' => 'Invalid visitor action.'], 400);
+    }
+
+    if ($resource === 'visitor-passes') {
+        if (!visitor_passes_available($pdo)) {
+            json_response(['error' => 'Visitor passes are not ready. Apply migration 003_visitor_passes first.'], 503);
+        }
+
+        if ($action === 'create') {
+            $actor = require_auth($pdo, ['resident']);
+            $homeowner = homeowner_for_user($pdo, $actor['id']);
+            $visitorName = required_string($input, 'visitorName', 120, 'Visitor name');
+            $contactNumber = required_string($input, 'contactNumber', 30, 'Contact number');
+            $purpose = required_string($input, 'purpose', 120, 'Purpose');
+            $plate = optional_string($input, 'vehiclePlate', 30);
+            $visitDate = require_iso_date($input, 'visitDate');
+            $manila = new DateTimeZone('Asia/Manila');
+            $today = new DateTimeImmutable('today', $manila);
+            $date = new DateTimeImmutable($visitDate, $manila);
+            if ($date < $today || $date > $today->modify('+30 days')) {
+                json_response(['error' => 'Visit date must be today or within the next 30 days.'], 422);
+            }
+            $id = uuid_v4();
+            $pdo->beginTransaction();
+            try {
+                $code = create_visitor_pass_code($pdo);
+                $insert = $pdo->prepare(
+                    'INSERT INTO visitor_passes
+                     (visitor_pass_id, pass_code, homeowner_id, created_by_user_id,
+                      visitor_name, contact_number, purpose, vehicle_plate, visit_date)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $insert->execute([
+                    $id, $code, $homeowner['id'], $actor['id'], $visitorName,
+                    $contactNumber, $purpose, $plate, $visitDate,
+                ]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'visitor_pass.create', 'visitor_pass', $id, null,
+                    ['visitorName' => $visitorName, 'visitDate' => $visitDate]
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+            json_response(['success' => true, 'id' => $id, 'passCode' => $code], 201);
+        }
+
+        if ($action === 'cancel') {
+            $actor = require_auth($pdo, ['resident']);
+            $homeowner = homeowner_for_user($pdo, $actor['id']);
+            $id = required_string($input, 'id', 36, 'Visitor pass ID');
+            $pdo->beginTransaction();
+            try {
+                $pass = fetch_row(
+                    $pdo,
+                    "SELECT visitor_pass_id, pass_code, pass_status FROM visitor_passes
+                     WHERE visitor_pass_id = ? AND homeowner_id = ? AND pass_status = 'active' FOR UPDATE",
+                    [$id, $homeowner['id']]
+                );
+                if (!$pass) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Active visitor pass not found.'], 404);
+                }
+                $pdo->prepare(
+                    "UPDATE visitor_passes SET pass_status = 'cancelled', cancelled_at = UTC_TIMESTAMP()
+                     WHERE visitor_pass_id = ?"
+                )->execute([$id]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'visitor_pass.cancel', 'visitor_pass', $id,
+                    ['status' => 'active'], ['status' => 'cancelled']
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+            json_response(['success' => true]);
+        }
+
+        if ($action === 'lookup') {
+            $actor = require_auth($pdo, ['admin', 'security']);
+            $code = required_visitor_pass_code($input);
+            enforce_rate_limit($pdo, 'visitor-pass-lookup', $actor['id'], 60, 60, 60);
+            $pass = fetch_row(
+                $pdo,
+                "SELECT vp.visitor_pass_id AS id, vp.pass_code AS passCode,
+                        vp.visitor_name AS visitorName, vp.contact_number AS contactNumber,
+                        vp.purpose, vp.vehicle_plate AS vehiclePlate, vp.visit_date AS visitDate,
+                        h.owner_name AS hostName, h.block_lot AS hostBlockLot, h.street AS hostStreet
+                 FROM visitor_passes vp
+                 JOIN homeowners h ON h.homeowner_id = vp.homeowner_id AND h.record_status = 'active'
+                 WHERE vp.pass_code = ? AND vp.pass_status = 'active'
+                   AND vp.visit_date = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR))
+                 LIMIT 1",
+                [$code]
+            );
+            if (!$pass) {
+                json_response(['error' => 'This pass is invalid, inactive, or not valid today.'], 404);
+            }
+            json_response(['success' => true, 'pass' => $pass]);
+        }
+
+        if ($action === 'redeem') {
+            $actor = require_auth($pdo, ['admin', 'security']);
+            $code = required_visitor_pass_code($input);
+            enforce_rate_limit($pdo, 'visitor-pass-redeem', $actor['id'], 30, 60, 60);
+            $pdo->beginTransaction();
+            try {
+                $pass = fetch_row(
+                    $pdo,
+                    "SELECT vp.*, h.owner_name, h.block_lot, h.street
+                     FROM visitor_passes vp
+                     JOIN homeowners h ON h.homeowner_id = vp.homeowner_id AND h.record_status = 'active'
+                     WHERE vp.pass_code = ? AND vp.pass_status = 'active'
+                       AND vp.visit_date = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR))
+                     FOR UPDATE",
+                    [$code]
+                );
+                if (!$pass) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'This pass is invalid, inactive, or not valid today.'], 404);
+                }
+                $logId = uuid_v4();
+                $destination = trim($pass['block_lot'] . ', ' . $pass['street']) . ' — ' . $pass['owner_name'];
+                $insert = $pdo->prepare(
+                    'INSERT INTO visitor_logs
+                     (visitor_log_id, visitor_name, contact_number, purpose, destination_address,
+                      vehicle_plate, recorded_by_user_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)'
+                );
+                $insert->execute([
+                    $logId, $pass['visitor_name'], $pass['contact_number'], $pass['purpose'],
+                    $destination, $pass['vehicle_plate'], $actor['id'],
+                ]);
+                $update = $pdo->prepare(
+                    "UPDATE visitor_passes SET pass_status = 'used', visitor_log_id = ?,
+                     redeemed_by_user_id = ?, redeemed_at = UTC_TIMESTAMP()
+                     WHERE visitor_pass_id = ?"
+                );
+                $update->execute([$logId, $actor['id'], $pass['visitor_pass_id']]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'visitor_pass.redeem', 'visitor_pass', $pass['visitor_pass_id'],
+                    ['status' => 'active'], ['status' => 'used', 'visitorLogId' => $logId]
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+            json_response(['success' => true, 'visitorLogId' => $logId]);
+        }
+
+        json_response(['error' => 'Invalid visitor pass action.'], 400);
     }
 
     if ($resource === 'announcements') {
@@ -447,61 +1303,95 @@ try {
     }
 
     if ($resource === 'payments') {
-        if ($action === 'submit') {
+        if (in_array($action, ['submit', 'resubmit'], true)) {
             $actor = require_auth($pdo, ['resident']);
             $homeowner = homeowner_for_user($pdo, $actor['id']);
-            $amount = filter_var($input['amount'] ?? null, FILTER_VALIDATE_FLOAT);
-            if ($amount === false || $amount <= 0 || $amount > 1_000_000) {
-                json_response(['error' => 'Enter a valid payment amount.'], 422);
-            }
+            $amountCents = payment_amount_cents($input['amount'] ?? null);
+            $amount = $amountCents / 100;
             $reference = required_string($input, 'reference', 120, 'Payment reference');
-            if (!isset($_FILES['proof']) || $_FILES['proof']['error'] !== UPLOAD_ERR_OK) {
-                json_response(['error' => 'A payment-proof image is required.'], 422);
+            $requestedPaymentId = $action === 'resubmit'
+                ? required_string($input, 'paymentId', 36, 'Payment ID')
+                : null;
+            $referenceOwner = fetch_row(
+                $pdo,
+                'SELECT payment_id FROM payments WHERE payment_reference = ? LIMIT 1',
+                [$reference]
+            );
+            if ($referenceOwner && $referenceOwner['payment_id'] !== $requestedPaymentId) {
+                json_response(['error' => 'That payment reference has already been submitted.'], 409);
             }
-            $file = $_FILES['proof'];
-            if ((int) $file['size'] <= 0 || (int) $file['size'] > 5_242_880) {
-                json_response(['error' => 'Payment proof must be no larger than 5 MB.'], 422);
-            }
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = (string) $finfo->file($file['tmp_name']);
-            $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-            if (!isset($extensions[$mime])) {
-                json_response(['error' => 'Payment proof must be a JPEG, PNG, or WebP image.'], 422);
-            }
-
-            $storage = __DIR__ . '/../storage/payment-proofs';
-            if (!is_dir($storage) && !mkdir($storage, 0750, true) && !is_dir($storage)) {
-                throw new RuntimeException('Payment-proof storage is unavailable.');
-            }
-            $storedName = bin2hex(random_bytes(24)) . '.' . $extensions[$mime];
-            $target = $storage . '/' . $storedName;
-            if (!move_uploaded_file($file['tmp_name'], $target)) {
-                throw new RuntimeException('Payment proof could not be stored.');
-            }
+            $proof = store_payment_proof();
 
             try {
-                $id = uuid_v4();
-                $insert = $pdo->prepare(
-                    'INSERT INTO payments
-                     (payment_id, homeowner_id, submitted_by_user_id, amount_paid, payment_reference,
-                      proof_stored_name, proof_original_name, proof_mime_type, proof_file_size, payment_date)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE())'
-                );
-                $insert->execute([
-                    $id, $homeowner['id'], $actor['id'], $amount, $reference, $storedName,
-                    basename((string) $file['name']), $mime, (int) $file['size'],
-                ]);
+                if ($action === 'submit') {
+                    $id = uuid_v4();
+                    $pdo->beginTransaction();
+                    $insert = $pdo->prepare(
+                        'INSERT INTO payments
+                         (payment_id, homeowner_id, submitted_by_user_id, amount_paid, payment_reference,
+                          proof_stored_name, proof_original_name, proof_mime_type, proof_file_size, payment_date)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE())'
+                    );
+                    $insert->execute([
+                        $id, $homeowner['id'], $actor['id'], $amount, $reference, $proof['storedName'],
+                        $proof['originalName'], $proof['mime'], $proof['size'],
+                    ]);
+                    required_audit_log(
+                        $pdo, $actor['id'], 'payment.submit', 'payment', $id, null,
+                        ['amount' => $amount, 'reference' => $reference]
+                    );
+                    $pdo->commit();
+                } else {
+                    $id = $requestedPaymentId;
+                    $pdo->beginTransaction();
+                    $payment = fetch_row(
+                        $pdo,
+                        "SELECT * FROM payments
+                         WHERE payment_id = ? AND homeowner_id = ? AND validation_status = 'rejected'
+                         FOR UPDATE",
+                        [$id, $homeowner['id']]
+                    );
+                    if (!$payment) {
+                        $pdo->rollBack();
+                        @unlink($proof['target']);
+                        json_response(['error' => 'Rejected payment not found or already resubmitted.'], 404);
+                    }
+                    $pdo->prepare('DELETE FROM payment_allocations WHERE payment_id = ?')->execute([$id]);
+                    $update = $pdo->prepare(
+                        "UPDATE payments SET submitted_by_user_id = ?, amount_paid = ?, unallocated_amount = 0,
+                         payment_reference = ?, proof_stored_name = ?, proof_original_name = ?,
+                         proof_mime_type = ?, proof_file_size = ?, validation_status = 'pending',
+                         validated_by_user_id = NULL, validated_at = NULL, payment_date = CURRENT_DATE()
+                         WHERE payment_id = ?"
+                    );
+                    $update->execute([
+                        $actor['id'], $amount, $reference, $proof['storedName'], $proof['originalName'],
+                        $proof['mime'], $proof['size'], $id,
+                    ]);
+                    required_audit_log(
+                        $pdo, $actor['id'], 'payment.resubmit', 'payment', $id,
+                        ['amount' => (float) $payment['amount_paid'], 'reference' => $payment['payment_reference'], 'status' => 'rejected'],
+                        ['amount' => $amount, 'reference' => $reference, 'status' => 'pending']
+                    );
+                    $pdo->commit();
+                    if ($payment['proof_stored_name'] !== $proof['storedName']) {
+                        @unlink(__DIR__ . '/../storage/payment-proofs/' . basename((string) $payment['proof_stored_name']));
+                    }
+                }
             } catch (Throwable $error) {
-                @unlink($target);
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                @unlink($proof['target']);
                 throw $error;
             }
-            audit_log($pdo, $actor['id'], 'payment.submit', 'payment', $id, null, ['amount' => $amount, 'reference' => $reference]);
-            json_response(['success' => true, 'id' => $id], 201);
+            json_response(['success' => true, 'id' => $id], $action === 'submit' ? 201 : 200);
         }
 
         if ($action === 'validate') {
             $actor = require_auth($pdo, ['admin']);
             $id = required_string($input, 'id', 36, 'Payment ID');
+            refresh_financial_state($pdo);
             $pdo->beginTransaction();
             try {
                 $payment = fetch_row(
@@ -513,45 +1403,34 @@ try {
                     $pdo->rollBack();
                     json_response(['error' => 'Pending payment not found.'], 404);
                 }
-                $dues = $pdo->prepare(
-                    "SELECT dues_id, amount_due, penalty_amount FROM dues
-                     WHERE homeowner_id = ? AND status = 'unpaid' ORDER BY billing_month FOR UPDATE"
+                $allocationResult = allocate_payment_credit(
+                    $pdo, $id, (string) $payment['homeowner_id'], (int) round((float) $payment['amount_paid'] * 100)
                 );
-                $dues->execute([$payment['homeowner_id']]);
-                $remaining = (float) $payment['amount_paid'];
-                $paidCount = 0;
-                foreach ($dues->fetchAll() as $due) {
-                    if ($remaining <= 0.00001) break;
-                    $allocated = $pdo->prepare('SELECT COALESCE(SUM(amount_applied), 0) FROM payment_allocations WHERE dues_id = ?');
-                    $allocated->execute([$due['dues_id']]);
-                    $required = max(0.0, (float) $due['amount_due'] + (float) $due['penalty_amount'] - (float) $allocated->fetchColumn());
-                    if ($required <= 0.00001) continue;
-                    $applied = min($remaining, $required);
-                    $allocation = $pdo->prepare(
-                        'INSERT INTO payment_allocations (allocation_id, payment_id, dues_id, amount_applied) VALUES (?, ?, ?, ?)'
-                    );
-                    $allocation->execute([uuid_v4(), $id, $due['dues_id'], $applied]);
-                    if ($applied + 0.00001 >= $required) {
-                        $markPaid = $pdo->prepare("UPDATE dues SET status = 'paid', penalty_amount = 0 WHERE dues_id = ?");
-                        $markPaid->execute([$due['dues_id']]);
-                        $paidCount++;
-                    }
-                    $remaining -= $applied;
-                }
+                $remaining = $allocationResult['remainingCents'] / 100;
+                $paidCount = $allocationResult['paidCount'];
                 $update = $pdo->prepare(
                     "UPDATE payments SET validation_status = 'validated', unallocated_amount = ?, validated_by_user_id = ?, validated_at = UTC_TIMESTAMP() WHERE payment_id = ?"
                 );
-                $update->execute([max(0, $remaining), $actor['id'], $id]);
+                $update->execute([$remaining, $actor['id'], $id]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'payment.validate', 'payment', $id,
+                    ['status' => 'pending'],
+                    [
+                        'status' => 'validated',
+                        'duesPaid' => $paidCount,
+                        'allocationsCreated' => $allocationResult['allocationCount'],
+                        'unallocatedAmount' => $remaining,
+                    ]
+                );
                 $pdo->commit();
                 refresh_financial_state($pdo);
-                audit_log($pdo, $actor['id'], 'payment.validate', 'payment', $id, ['status' => 'pending'], ['status' => 'validated', 'duesPaid' => $paidCount]);
                 $homeowner = fetch_row($pdo, 'SELECT owner_name, email FROM homeowners WHERE homeowner_id = ?', [$payment['homeowner_id']]);
                 $mailSent = $homeowner ? safe_notification(
                     $pdo, $homeowner['email'], $homeowner['owner_name'], 'NovaLink payment validated',
                     "Your payment reference {$payment['payment_reference']} was validated. {$paidCount} billing record(s) were settled.",
                     'payment_update'
                 ) : false;
-                json_response(['success' => true, 'duesPaid' => $paidCount, 'unallocatedAmount' => round($remaining, 2), 'emailDelivered' => $mailSent]);
+                json_response(['success' => true, 'duesPaid' => $paidCount, 'unallocatedAmount' => $remaining, 'emailDelivered' => $mailSent]);
             } catch (Throwable $error) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
@@ -563,34 +1442,103 @@ try {
         if ($action === 'reject') {
             $actor = require_auth($pdo, ['admin']);
             $id = required_string($input, 'id', 36, 'Payment ID');
-            $payment = fetch_row(
-                $pdo,
-                "SELECT p.*, h.owner_name, h.email FROM payments p JOIN homeowners h ON h.homeowner_id = p.homeowner_id
-                 WHERE p.payment_id = ? AND p.validation_status = 'pending'",
-                [$id]
-            );
-            if (!$payment) {
-                json_response(['error' => 'Pending payment not found.'], 404);
+            $reason = required_string($input, 'reason', 500, 'Rejection reason');
+            $pdo->beginTransaction();
+            try {
+                $payment = fetch_row(
+                    $pdo,
+                    "SELECT p.*, h.owner_name, h.email FROM payments p JOIN homeowners h ON h.homeowner_id = p.homeowner_id
+                     WHERE p.payment_id = ? AND p.validation_status = 'pending' FOR UPDATE",
+                    [$id]
+                );
+                if (!$payment) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Pending payment not found.'], 404);
+                }
+                $update = $pdo->prepare(
+                    "UPDATE payments SET validation_status = 'rejected', validated_by_user_id = ?, validated_at = UTC_TIMESTAMP() WHERE payment_id = ?"
+                );
+                $update->execute([$actor['id'], $id]);
+                required_audit_log(
+                    $pdo, $actor['id'], 'payment.reject', 'payment', $id,
+                    ['status' => 'pending'], ['status' => 'rejected', 'reason' => $reason]
+                );
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
             }
-            $update = $pdo->prepare(
-                "UPDATE payments SET validation_status = 'rejected', validated_by_user_id = ?, validated_at = UTC_TIMESTAMP() WHERE payment_id = ?"
-            );
-            $update->execute([$actor['id'], $id]);
-            audit_log($pdo, $actor['id'], 'payment.reject', 'payment', $id, ['status' => 'pending'], ['status' => 'rejected']);
             $mailSent = safe_notification(
                 $pdo, $payment['email'], $payment['owner_name'], 'NovaLink payment proof rejected',
-                "Your payment proof with reference {$payment['payment_reference']} was rejected. Please review the details and submit a valid proof or contact the NHAI office.",
+                "Your payment proof with reference {$payment['payment_reference']} was rejected. Reason: {$reason}. You can correct the details and resubmit it in NovaLink.",
                 'payment_update'
             );
             json_response(['success' => true, 'emailDelivered' => $mailSent]);
         }
 
+        if ($action === 'reconcile-credits') {
+            $actor = require_auth($pdo, ['admin']);
+            refresh_financial_state($pdo);
+            $pdo->beginTransaction();
+            try {
+                $credits = $pdo->query(
+                    "SELECT payment_id, homeowner_id, unallocated_amount FROM payments
+                     WHERE validation_status = 'validated' AND unallocated_amount > 0
+                     ORDER BY validated_at, created_at FOR UPDATE"
+                )->fetchAll();
+                $paymentsUpdated = 0;
+                $allocationsCreated = 0;
+                $duesPaid = 0;
+                $updateCredit = $pdo->prepare('UPDATE payments SET unallocated_amount = ? WHERE payment_id = ?');
+                foreach ($credits as $credit) {
+                    $result = allocate_payment_credit(
+                        $pdo,
+                        (string) $credit['payment_id'],
+                        (string) $credit['homeowner_id'],
+                        (int) round((float) $credit['unallocated_amount'] * 100)
+                    );
+                    if ($result['allocationCount'] === 0) {
+                        continue;
+                    }
+                    $updateCredit->execute([$result['remainingCents'] / 100, $credit['payment_id']]);
+                    $paymentsUpdated++;
+                    $allocationsCreated += $result['allocationCount'];
+                    $duesPaid += $result['paidCount'];
+                }
+                required_audit_log(
+                    $pdo, $actor['id'], 'payment.reconcile_credits', 'payment_batch', null, null,
+                    [
+                        'paymentsUpdated' => $paymentsUpdated,
+                        'allocationsCreated' => $allocationsCreated,
+                        'duesPaid' => $duesPaid,
+                    ]
+                );
+                $pdo->commit();
+                refresh_financial_state($pdo);
+                json_response([
+                    'success' => true,
+                    'paymentsUpdated' => $paymentsUpdated,
+                    'allocationsCreated' => $allocationsCreated,
+                    'duesPaid' => $duesPaid,
+                ]);
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+        }
+
         if ($action === 'remind') {
             $actor = require_auth($pdo, ['admin']);
+            refresh_financial_state($pdo);
             $homeownerId = optional_string($input, 'homeownerId', 36);
             $sql =
                 "SELECT h.homeowner_id, h.owner_name, h.email, COUNT(d.dues_id) AS unpaidCount,
-                        SUM(d.amount_due + d.penalty_amount) AS totalOwed
+                        SUM(GREATEST(0, d.amount_due + d.penalty_amount -
+                            COALESCE((SELECT SUM(pa.amount_applied) FROM payment_allocations pa WHERE pa.dues_id = d.dues_id), 0))) AS totalOwed
                  FROM homeowners h JOIN dues d ON d.homeowner_id = h.homeowner_id AND d.status = 'unpaid'";
             $params = [];
             if ($homeownerId) {
@@ -619,6 +1567,55 @@ try {
 
     if ($resource === 'dues') {
         $actor = require_auth($pdo, ['admin']);
+        if ($action === 'configure') {
+            $amountCents = payment_amount_cents($input['monthlyDueAmount'] ?? null);
+            $penaltyValue = $input['monthlyPenaltyAmount'] ?? null;
+            if (!is_numeric($penaltyValue)) {
+                json_response(['error' => 'Enter a valid penalty amount.'], 422);
+            }
+            $penaltyCents = (int) round((float) $penaltyValue * 100);
+            if ($penaltyCents < 0 || $penaltyCents > 100_000_000) {
+                json_response(['error' => 'Enter a valid penalty amount.'], 422);
+            }
+            $dueDay = filter_var($input['monthlyDueDay'] ?? null, FILTER_VALIDATE_INT);
+            $restrictionThreshold = filter_var($input['restrictAfterUnpaidMonths'] ?? null, FILTER_VALIDATE_INT);
+            if ($dueDay === false || $dueDay < 1 || $dueDay > 31) {
+                json_response(['error' => 'Monthly due day must be between 1 and 31.'], 422);
+            }
+            if ($restrictionThreshold === false || $restrictionThreshold < 1 || $restrictionThreshold > 24) {
+                json_response(['error' => 'Restriction threshold must be between 1 and 24 months.'], 422);
+            }
+            $settings = [
+                'monthly_due_amount' => number_format($amountCents / 100, 2, '.', ''),
+                'monthly_due_day' => (string) $dueDay,
+                'monthly_penalty_amount' => number_format($penaltyCents / 100, 2, '.', ''),
+                'restrict_after_unpaid_months' => (string) $restrictionThreshold,
+            ];
+            $before = [];
+            foreach (array_keys($settings) as $key) {
+                $before[$key] = system_setting($pdo, $key, '');
+            }
+            $pdo->beginTransaction();
+            try {
+                $upsert = $pdo->prepare(
+                    'INSERT INTO system_settings (setting_key, setting_value, updated_by_user_id)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by_user_id = VALUES(updated_by_user_id)'
+                );
+                foreach ($settings as $key => $value) {
+                    $upsert->execute([$key, $value, $actor['id']]);
+                }
+                required_audit_log($pdo, $actor['id'], 'dues.configure', 'system_settings', 'dues', $before, $settings);
+                $pdo->commit();
+                refresh_financial_state($pdo);
+                json_response(['success' => true]);
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $error;
+            }
+        }
         if ($action !== 'generate') {
             json_response(['error' => 'Invalid dues action.'], 400);
         }

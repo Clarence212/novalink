@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Home, ChevronDown, ChevronUp, Search, Plus, Edit2, X } from 'lucide-react';
+import { EmptyState, PageHeader, StatCard } from '../components/ui/Primitives';
 
 const EMPTY_RECORD = {
   ownerName: '', blockLot: '', street: '', contactNumber: '', email: '', occupantsText: '',
@@ -54,32 +55,13 @@ export const HomeownersRecords = () => {
   );
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">Homeowners' Master Records</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Centralized registry of all NHAI residents and their related records</p>
-        </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <PageHeader eyebrow="Community records" title="Homeowners' Master Records" description="The authoritative registry used for account matching and resident services." actions={<button type="button" onClick={openCreate} className="ui-button bg-blue-600 text-white hover:bg-blue-500">
           <Plus className="w-4 h-4" /> Add Homeowner
-        </button>
-      </div>
+        </button>} />
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-blue-400">{homeowners.length}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Total Homeowners</div>
-        </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-emerald-400">{homeowners.filter(h => !h.restricted).length}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Good Standing</div>
-        </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 text-center">
-          <div className="text-2xl font-bold text-amber-400">{homeowners.filter(h => h.restricted).length}</div>
-          <div className="text-xs text-slate-500 mt-0.5">Restricted Accounts</div>
-        </div>
-      </div>
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Total homeowners" value={homeowners.length} icon={Home} tone="blue" /><StatCard label="Good standing" value={homeowners.filter(h => !h.restricted).length} detail="No service restrictions" icon={Home} tone="emerald" /><StatCard label="Restricted" value={homeowners.filter(h => h.restricted).length} detail="Outstanding attention" icon={Home} tone="amber" /></div>
 
       {/* Search */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700">
@@ -181,15 +163,15 @@ export const HomeownersRecords = () => {
             </div>
           );
         })}
-        {filtered.length === 0 && <div className="text-center py-12 text-slate-500 text-sm">No homeowner records found.</div>}
+        {filtered.length === 0 && <div className="rounded-2xl border border-dashed border-slate-700"><EmptyState icon={Home} title="No homeowner records found" description="Try another name, block and lot, or email address." /></div>}
       </div>
 
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleSave} className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl">
+        <div className="ui-modal-backdrop" role="presentation">
+          <form onSubmit={handleSave} className="ui-modal relative max-w-lg space-y-4" role="dialog" aria-modal="true" aria-labelledby="homeowner-form-title">
             <button type="button" onClick={() => setEditingRecord(null)} className="absolute top-5 right-5 text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             <div>
-              <h3 className="text-lg font-bold text-slate-100">{editingRecord === 'new' ? 'Add Homeowner Record' : 'Edit Homeowner Record'}</h3>
+              <h3 id="homeowner-form-title" className="text-lg font-bold text-slate-100">{editingRecord === 'new' ? 'Add Homeowner Record' : 'Edit Homeowner Record'}</h3>
               <p className="text-xs text-slate-400 mt-1">Use the exact registered email and block/lot so resident self-registration can be matched securely.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

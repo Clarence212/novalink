@@ -114,12 +114,13 @@ export async function apiAction(resource, action, payload = {}) {
   });
 }
 
-export async function apiUploadPayment({ amount, reference, proof }) {
+export async function apiUploadPayment({ amount, reference, proof, paymentId = null }) {
   const data = new FormData();
   data.append('resource', 'payments');
-  data.append('action', 'submit');
+  data.append('action', paymentId ? 'resubmit' : 'submit');
   data.append('amount', String(amount));
   data.append('reference', reference);
+  if (paymentId) data.append('paymentId', paymentId);
   data.append('proof', proof);
   return request('records.php', { method: 'POST', formData: data });
 }

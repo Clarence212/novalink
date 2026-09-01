@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Plus, X, Car, CheckCircle, XCircle } from 'lucide-react';
+import { ConfirmDialog, EmptyState, PageHeader } from '../components/ui/Primitives';
 
 const statusBadge = (s) => {
   const m = { pending: 'bg-amber-900/60 text-amber-400', approved: 'bg-emerald-900/60 text-emerald-400', rejected: 'bg-red-900/60 text-red-400' };
@@ -13,6 +14,8 @@ export const VehicleManagement = () => {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ vehicleType: 'Sedan', makeModel: '', plateNumber: '', color: '' });
+  const [confirmation, setConfirmation] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const myVehicles = isAdmin
     ? vehicles
@@ -29,19 +32,26 @@ export const VehicleManagement = () => {
 
   const vehicleTypes = ['Sedan', 'SUV', 'Pickup Truck', 'Van', 'Motorcycle', 'Other'];
 
+  const confirmReview = async () => {
+    if (!confirmation) return;
+    setBusy(true);
+    await reviewVehicle(confirmation.vehicle.id, confirmation.status);
+    setBusy(false);
+    setConfirmation(null);
+  };
+
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100">{isAdmin ? 'Vehicle Records' : 'My Vehicles'}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{isAdmin ? 'Review submitted vehicle information and approve for master record inclusion' : 'Submit vehicle information for NHAI approval'}</p>
-        </div>
-        {!isAdmin && (
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <PageHeader
+        eyebrow="Community records"
+        title={isAdmin ? 'Vehicle Records' : 'My Vehicles'}
+        description={isAdmin ? 'Review submitted vehicle information and approve it for master-record inclusion.' : 'Submit vehicle information for NHAI approval.'}
+        actions={!isAdmin && (
           <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition">
             <Plus className="w-4 h-4" /> Add Vehicle
           </button>
         )}
-      </div>
+      />
 
       {}
       {!isAdmin && showForm && (
@@ -86,7 +96,7 @@ export const VehicleManagement = () => {
         <div className="px-5 py-3 border-b border-slate-700">
           <h3 className="text-sm font-bold text-slate-200">Vehicle Records</h3>
         </div>
-        <table className="w-full text-xs">
+        <table data-responsive-table="true" className="w-full min-w-[850px] text-xs">
           <thead>
             <tr className="text-left text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-700">
               {isAdmin && <th className="px-5 py-3">Homeowner</th>}
@@ -103,21 +113,21 @@ export const VehicleManagement = () => {
               const homeowner = isAdmin ? homeowners.find(h => h.id === v.homeownerId) : null;
               return (
                 <tr key={v.id} className="hover:bg-slate-700/30 transition">
-                  {isAdmin && <td className="px-5 py-3 text-slate-300 font-medium">{homeowner?.ownerName}</td>}
-                  <td className="px-5 py-3 text-slate-400">{v.vehicleType}</td>
-                  <td className="px-5 py-3 text-slate-300 font-medium">{v.makeModel}</td>
-                  <td className="px-5 py-3 text-slate-200 font-mono">{v.plateNumber}</td>
-                  <td className="px-5 py-3 text-slate-400">{v.color}</td>
-                  <td className="px-5 py-3">{statusBadge(v.approvalStatus)}</td>
+                  {isAdmin && <td data-label="Homeowner" className="px-5 py-3 text-slate-300 font-medium">{homeowner?.ownerName}</td>}
+                  <td data-label="Type" className="px-5 py-3 text-slate-400">{v.vehicleType}</td>
+                  <td data-label="Make / model" className="px-5 py-3 text-slate-300 font-medium">{v.makeModel}</td>
+                  <td data-label="Plate number" className="px-5 py-3 text-slate-200 font-mono">{v.plateNumber}</td>
+                  <td data-label="Color" className="px-5 py-3 text-slate-400">{v.color}</td>
+                  <td data-label="Status" className="px-5 py-3">{statusBadge(v.approvalStatus)}</td>
                   {isAdmin && (
-                    <td className="px-5 py-3">
+                    <td data-label="Action" className="px-5 py-3">
                       {v.approvalStatus === 'pending' && (
-                        <div className="flex gap-1">
-                          <button onClick={() => reviewVehicle(v.id, 'approved')} className="p-1 rounded-lg bg-emerald-600/70 hover:bg-emerald-600 text-white transition" title="Approve">
-                            <CheckCircle className="w-3.5 h-3.5" />
+                        <div className="flex justify-end gap-2 md:justify-start">
+                          <button type="button" onClick={() => setConfirmation({ vehicle: v, status: 'approved' })} className="ui-button min-h-9 bg-emerald-600 px-3 text-white hover:bg-emerald-500" aria-label={`Approve ${v.makeModel} ${v.plateNumber}`}>
+                            <CheckCircle className="w-3.5 h-3.5" /> Approve
                           </button>
-                          <button onClick={() => reviewVehicle(v.id, 'rejected')} className="p-1 rounded-lg bg-red-600/70 hover:bg-red-600 text-white transition" title="Reject">
-                            <XCircle className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => setConfirmation({ vehicle: v, status: 'rejected' })} className="ui-button min-h-9 bg-red-600 px-3 text-white hover:bg-red-500" aria-label={`Reject ${v.makeModel} ${v.plateNumber}`}>
+                            <XCircle className="w-3.5 h-3.5" /> Reject
                           </button>
                         </div>
                       )}
@@ -127,11 +137,22 @@ export const VehicleManagement = () => {
               );
             })}
             {myVehicles.length === 0 && (
-              <tr><td colSpan={isAdmin ? 7 : 5} className="text-center py-10 text-slate-500">No vehicles on record.</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 5}><EmptyState icon={Car} title="No vehicles on record" description={isAdmin ? 'New resident submissions will appear here for review.' : 'Add your first vehicle to begin the approval process.'} /></td></tr>
             )}
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={`${confirmation?.status === 'approved' ? 'Approve' : 'Reject'} this vehicle?`}
+        description={confirmation ? `${confirmation.vehicle.makeModel} · ${confirmation.vehicle.plateNumber}` : ''}
+        impact={confirmation?.status === 'approved' ? 'The vehicle becomes eligible for sticker-renewal processing.' : 'The resident must correct and resubmit the vehicle information.'}
+        confirmLabel={confirmation?.status === 'approved' ? 'Approve Vehicle' : 'Reject Vehicle'}
+        tone={confirmation?.status === 'approved' ? 'warning' : 'danger'}
+        busy={busy}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={confirmReview}
+      />
     </div>
   );
 };

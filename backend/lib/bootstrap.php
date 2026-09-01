@@ -5,6 +5,43 @@ require_once __DIR__ . '/../config/database.php';
 
 const NOVALINK_MAX_JSON_BYTES = 1_048_576;
 
+function request_id(): string
+{
+    static $requestId = null;
+    if ($requestId === null) {
+        $requestId = bin2hex(random_bytes(12));
+    }
+    return $requestId;
+}
+
+function record_application_error(Throwable $error, string $severity = 'error'): string
+{
+    $record = [
+        'timestamp' => gmdate(DATE_ATOM),
+        'severity' => $severity,
+        'requestId' => request_id(),
+        'exception' => get_class($error),
+        'message' => mb_substr($error->getMessage(), 0, 2000),
+        'file' => basename($error->getFile()),
+        'line' => $error->getLine(),
+        'method' => substr((string) ($_SERVER['REQUEST_METHOD'] ?? PHP_SAPI), 0, 12),
+        'path' => substr((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: ''), 0, 255),
+    ];
+    $encoded = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($encoded === false) {
+        $encoded = '{"severity":"error","message":"Application error could not be encoded."}';
+    }
+    $configuredPath = config_value('ERROR_LOG_PATH', 'NOVALINK_ERROR_LOG_PATH', '');
+    if ($configuredPath !== '') {
+        $directory = dirname($configuredPath);
+        if (is_dir($directory) && is_writable($directory) && error_log($encoded . PHP_EOL, 3, $configuredPath)) {
+            return $record['requestId'];
+        }
+    }
+    error_log('NovaLink application error ' . $encoded);
+    return $record['requestId'];
+}
+
 function is_https_request(): bool
 {
     if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
@@ -22,6 +59,7 @@ function configure_http_headers(): void
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
     header("Permissions-Policy: camera=(), microphone=(), geolocation=()");
+    header('X-Request-ID: ' . request_id());
 
     $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
     $configured = config_value('APP_ORIGIN', 'NOVALINK_APP_ORIGIN', '');
@@ -77,6 +115,9 @@ function start_secure_session(): void
 
 function json_response(array $payload, int $status = 200): void
 {
+    if ($status >= 400 && !isset($payload['requestId'])) {
+        $payload['requestId'] = request_id();
+    }
     http_response_code($status);
     echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
@@ -314,11 +355,32 @@ function clear_rate_limit(PDO $pdo, string $action, string $identifier): void
 
 function api_exception(Throwable $error): void
 {
-    error_log('NovaLink API failure: ' . $error->getMessage() . "\n" . $error->getTraceAsString());
+    $requestId = record_application_error($error);
     $environment = config_value('APP_ENV', 'NOVALINK_APP_ENV', 'production');
     $message = $environment === 'development' ? $error->getMessage() : 'An unexpected server error occurred.';
-    json_response(['error' => $message], 500);
+    json_response(['error' => $message, 'requestId' => $requestId], 500);
+}
+
+function register_fatal_error_monitor(): void
+{
+    register_shutdown_function(static function (): void {
+        $lastError = error_get_last();
+        if (!$lastError || !in_array($lastError['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            return;
+        }
+        record_application_error(
+            new ErrorException(
+                (string) $lastError['message'],
+                0,
+                (int) $lastError['type'],
+                (string) $lastError['file'],
+                (int) $lastError['line']
+            ),
+            'fatal'
+        );
+    });
 }
 
 configure_http_headers();
 start_secure_session();
+register_fatal_error_monitor();
