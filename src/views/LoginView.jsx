@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, Bell, UserCheck, ArrowRight, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { apiSendOtp, apiVerifyOtp } from '../services/api';
+import { SiteFooter } from '../components/SiteFooter';
 
 export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const { login, setIsGuestMode, showToast, createUserAccount, updatePassword } = useApp();
@@ -144,9 +145,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-slate-900">
-      { }
-      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px] border border-slate-200/50">
+    <div className="min-h-screen bg-slate-900 flex flex-col">
+      <div className="flex flex-1 items-center justify-center px-4 py-8">
+        { }
+        <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl shadow-black/25 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px]">
 
         { }
         <div className="md:col-span-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-8 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden">
@@ -317,7 +319,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
           </div>
         </div>
 
+        </div>
       </div>
+
+      <SiteFooter />
 
       {/* EXISTING ACCOUNT EMAIL VERIFICATION MODAL */}
       {activeModal === 'verify-account' && (

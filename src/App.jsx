@@ -25,6 +25,7 @@ import { StickerRenewals } from './views/StickerRenewals';
 import { GuestModeView } from './views/GuestModeView';
 import { LoadingPanel } from './components/ui/Primitives';
 import { CookieConsent } from './components/CookieConsent';
+import { LegalPage } from './views/LegalPage';
 
 const AppContent = () => {
   const { currentUser, isGuestMode, setIsGuestMode, isBootstrapping, logout, changePassword } = useApp();
@@ -176,6 +177,22 @@ const AppContent = () => {
 };
 
 export default function App() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  const legalDocument = path === '/terms-and-conditions'
+    ? 'terms'
+    : path === '/privacy-policy'
+      ? 'privacy'
+      : null;
+
+  if (legalDocument) {
+    return (
+      <>
+        <LegalPage documentKey={legalDocument} />
+        <CookieConsent />
+      </>
+    );
+  }
+
   return (
     <AppProvider>
       <AppContent />
