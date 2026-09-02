@@ -103,11 +103,6 @@ try {
         $fullName = required_string($input, 'fullName', 120, 'Full name');
         $password = require_password($input['password'] ?? '');
         $verificationToken = required_string($input, 'verificationToken', 256, 'Verification token');
-        $blockLot = required_string($input, 'blockLot', 100, 'Block and lot');
-        $blockLotKey = strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $blockLot));
-        if ($blockLotKey === '') {
-            json_response(['error' => 'Block and lot must contain letters or numbers.'], 422);
-        }
 
         enforce_rate_limit($pdo, 'register', $email, 3, 3600, 3600);
         $statement = $pdo->prepare(
@@ -128,29 +123,6 @@ try {
             json_response(['error' => 'An account already exists for this email address.'], 409);
         }
 
-        $homeowner = $pdo->prepare(
-            "SELECT homeowner_id FROM homeowners
-             WHERE email = ?
-               AND REGEXP_REPLACE(LOWER(block_lot), '[^a-z0-9]', '') = ?
-               AND user_id IS NULL AND record_status = 'active' LIMIT 1"
-        );
-        $homeowner->execute([$email, $blockLotKey]);
-        $homeownerId = $homeowner->fetchColumn();
-        if (!$homeownerId) {
-            audit_log(
-                $pdo,
-                null,
-                'registration.match_failed',
-                'email_verification_token',
-                $tokenRecord['token_id'],
-                null,
-                ['email' => $email, 'fullName' => $fullName, 'blockLot' => $blockLot]
-            );
-            json_response([
-                'error' => 'The email and block/lot do not match an unlinked NHAI homeowner record. Contact the office to update the master record.',
-            ], 422);
-        }
-
         $pdo->beginTransaction();
         try {
             $userId = uuid_v4();
@@ -164,16 +136,9 @@ try {
             $consume = $pdo->prepare('UPDATE email_verification_tokens SET consumed_at = UTC_TIMESTAMP() WHERE token_id = ?');
             $consume->execute([$tokenRecord['token_id']]);
 
-            $matchingHomeowner = $pdo->prepare(
-                'UPDATE homeowners SET user_id = ? WHERE homeowner_id = ? AND user_id IS NULL'
-            );
-            $matchingHomeowner->execute([$userId, $homeownerId]);
-            if ($matchingHomeowner->rowCount() !== 1) {
-                throw new RuntimeException('The homeowner record was linked by another request.');
-            }
             $pdo->commit();
             clear_rate_limit($pdo, 'register', $email);
-            audit_log($pdo, $userId, 'user.register', 'user', $userId, null, ['email' => $email, 'blockLot' => $blockLot]);
+            audit_log($pdo, $userId, 'user.register', 'user', $userId, null, ['email' => $email]);
             json_response(['success' => true, 'message' => 'Registration submitted for administrator approval.'], 201);
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) {

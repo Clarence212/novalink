@@ -22,7 +22,6 @@ import { SiteFooter } from '../components/SiteFooter';
 const EMPTY_REGISTRATION = {
   fullName: '',
   email: '',
-  blockLot: '',
   password: '',
   confirmPassword: '',
   acceptedTerms: false,
@@ -117,11 +116,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     const normalized = {
       fullName: regData.fullName.trim(),
       email: regData.email.trim().toLowerCase(),
-      blockLot: regData.blockLot.trim(),
     };
 
-    if (!normalized.fullName || !normalized.email || !normalized.blockLot) {
-      setRegError('Complete your name, email, and block/lot details.');
+    if (!normalized.fullName || !normalized.email) {
+      setRegError('Complete your name and email address.');
       return;
     }
     if (!passwordChecks.length || !passwordChecks.letter || !passwordChecks.number) {
@@ -140,7 +138,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     setRegBusy(true);
     setRegError('');
     try {
-      await apiSendOtp(normalized.email, normalized.fullName, 'registration', '', normalized.blockLot);
+      await apiSendOtp(normalized.email, normalized.fullName, 'registration');
       setRegData((current) => ({ ...current, ...normalized }));
       setRegVerificationToken('');
       setRegStep(2);
@@ -160,7 +158,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     setRegBusy(true);
     setRegError('');
     try {
-      await apiSendOtp(regData.email, regData.fullName, 'registration', '', regData.blockLot);
+      await apiSendOtp(regData.email, regData.fullName, 'registration');
       setRegOtp('');
       setRegVerificationToken('');
       setRegResendSeconds(60);
@@ -189,7 +187,6 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
         {
           fullName: regData.fullName,
           email: regData.email,
-          blockLot: regData.blockLot,
           password: regData.password,
           role: 'resident',
         },
@@ -496,115 +493,73 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       {/* REGISTRATION MODAL */}
       {activeModal === 'register' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm" role="presentation">
-          <div className="my-4 w-full max-w-lg rounded-3xl border border-slate-100 bg-white p-6 text-slate-800 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="registration-title">
-            <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600">Resident access</p>
-                <h3 id="registration-title" className="text-xl font-bold text-slate-900">Create your NovaLink account</h3>
-                <p className="mt-1 text-xs text-slate-500">Use the same email and block/lot listed in the NHAI homeowner record.</p>
-              </div>
-              <button type="button" onClick={closeRegistration} className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Close registration">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-5 grid grid-cols-3 gap-2" aria-label={`Registration step ${regStep} of 3`}>
-              {['Details', 'Verify', 'Submitted'].map((label, index) => {
-                const step = index + 1;
-                const complete = regStep > step;
-                const active = regStep === step;
-                return (
-                  <div key={label} className="min-w-0">
-                    <div className={`mb-1.5 h-1.5 rounded-full ${complete || active ? 'bg-blue-600' : 'bg-slate-200'}`} />
-                    <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${active ? 'text-blue-700' : complete ? 'text-slate-700' : 'text-slate-400'}`}>
-                      {complete ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <Circle className={`h-3.5 w-3.5 shrink-0 ${active ? 'fill-blue-100' : ''}`} />}
-                      <span className="truncate">{label}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {regError && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-900" role="alert">{regError}</div>}
-
-            {regStep === 1 && (
-              <form onSubmit={handleRegisterOtpSend} className="space-y-3 text-xs">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="mb-1 block font-semibold text-slate-700">Full Name</label>
-                    <input type="text" required autoComplete="name" placeholder="Full name" value={regData.fullName} onChange={(event) => setRegData({ ...regData, fullName: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-semibold text-slate-700">Email Address</label>
-                    <input type="email" required autoComplete="email" placeholder="Email" value={regData.email} onChange={(event) => setRegData({ ...regData, email: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-semibold text-slate-700">Block & Lot</label>
-                    <input type="text" required placeholder="e.g. Block 1, Lot 5" value={regData.blockLot} onChange={(event) => setRegData({ ...regData, blockLot: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-semibold text-slate-700">Password</label>
-                    <div className="relative">
-                      <input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" minLength={12} maxLength={128} placeholder="Create password" value={regData.password} onChange={(event) => setRegData({ ...regData, password: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 pr-9 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                      <button type="button" onClick={() => setShowRegPassword((visible) => !visible)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showRegPassword ? 'Hide registration password' : 'Show registration password'}>
-                        {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-semibold text-slate-700">Confirm Password</label>
-                    <input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" placeholder="Confirm password" value={regData.confirmPassword} onChange={(event) => setRegData({ ...regData, confirmPassword: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                  </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-white" role="presentation">
+          <div className="grid min-h-screen lg:grid-cols-[minmax(320px,0.78fr)_minmax(0,1.22fr)]" role="dialog" aria-modal="true" aria-labelledby="registration-title">
+            <aside className="relative overflow-hidden bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-700 px-6 py-8 text-white sm:px-10 lg:flex lg:min-h-screen lg:flex-col lg:justify-between lg:px-12 lg:py-12">
+              <div className="absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+              <div className="absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-blue-300/10 blur-3xl" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-3">
+                  <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="h-14 w-14 object-contain drop-shadow-md" />
+                  <div><p className="text-lg font-black tracking-tight">NovaLink Portal</p><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200">Resident registration</p></div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-slate-50 p-3 text-[11px]">
-                  {[[passwordChecks.length, '12+ characters'], [passwordChecks.letter, 'Contains a letter'], [passwordChecks.number, 'Contains a number'], [passwordChecks.matches, 'Passwords match']].map(([passed, label]) => (
-                    <span key={label} className={`flex items-center gap-1.5 ${passed ? 'font-medium text-emerald-700' : 'text-slate-500'}`}>
-                      {passed ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}{label}
-                    </span>
+                <div className="mt-10 max-w-md lg:mt-20">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-200">Welcome home</p>
+                  <h3 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">One account for your community services.</h3>
+                  <p className="mt-4 max-w-sm text-sm leading-6 text-blue-100/85">Create your account, verify your email, and submit it to the Novaville Homeowners' Association for approval.</p>
+                </div>
+                <ol className="mt-8 hidden space-y-5 text-sm lg:block">
+                  {['Create your account details', 'Verify your email address', 'Wait for administrator approval'].map((label, index) => (
+                    <li key={label} className="flex items-center gap-3 text-blue-100">
+                      <span className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${regStep > index + 1 ? 'border-emerald-300 bg-emerald-400 text-emerald-950' : regStep === index + 1 ? 'border-white bg-white text-blue-700' : 'border-blue-300/50 text-blue-200'}`}>{regStep > index + 1 ? <Check className="h-3.5 w-3.5" /> : index + 1}</span>
+                      <span className={regStep === index + 1 ? 'font-bold text-white' : ''}>{label}</span>
+                    </li>
                   ))}
-                </div>
-
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 text-[11px] leading-relaxed text-slate-600">
-                  <input type="checkbox" checked={regData.acceptedTerms} onChange={(event) => setRegData({ ...regData, acceptedTerms: event.target.checked })} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
-                  <span>I agree to the <a href="/terms-and-conditions" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Terms and Conditions</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Privacy Policy</a>.</span>
-                </label>
-
-                <button type="submit" disabled={regBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  {regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Continue to email verification
-                </button>
-              </form>
-            )}
-
-            {regStep === 2 && (
-              <form onSubmit={handleRegisterVerify} className="space-y-4 text-xs">
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900">
-                  <div className="flex items-start gap-3"><div className="rounded-xl bg-blue-600 p-2 text-white"><Mail className="h-4 w-4" /></div><div><p className="font-bold">Check your email</p><p className="mt-1 leading-relaxed">Enter the six-digit code sent to <strong>{regData.email}</strong>. The code expires after 15 minutes.</p></div></div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block font-semibold text-slate-700">Verification Code</label>
-                  <input type="text" required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" minLength={6} maxLength={6} placeholder="000000" value={regOtp} onChange={(event) => setRegOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-slate-200 p-3 text-center text-xl font-black tracking-[0.35em] text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                </div>
-                <button type="submit" disabled={regBusy || regOtp.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  {regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Verify and submit registration
-                </button>
-                <div className="flex items-center justify-between gap-3">
-                  <button type="button" onClick={() => { setRegStep(1); setRegOtp(''); setRegVerificationToken(''); setRegError(''); }} className="flex items-center gap-1 font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft className="h-3.5 w-3.5" /> Edit details</button>
-                  <button type="button" onClick={handleRegisterResend} disabled={regBusy || regResendSeconds > 0} className="font-semibold text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400">{regResendSeconds > 0 ? `Resend in ${regResendSeconds}s` : 'Resend code'}</button>
-                </div>
-              </form>
-            )}
-
-            {regStep === 3 && (
-              <div className="text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-8 w-8" /></div>
-                <h4 className="text-xl font-bold text-slate-900">Registration submitted</h4>
-                <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-slate-600">Your email has been verified. An NHAI administrator will review the account before you can sign in.</p>
-                <div className="my-5 rounded-2xl bg-slate-50 p-4 text-left text-xs text-slate-600"><p className="font-semibold text-slate-800">What happens next?</p><p className="mt-1.5 leading-relaxed">You will receive an update after the account is approved. Use <strong>{regData.email}</strong> when signing in.</p></div>
-                <button type="button" onClick={closeRegistration} className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700">Return to sign in</button>
+                </ol>
               </div>
-            )}
+              <div className="relative z-10 mt-8 hidden border-t border-white/15 pt-5 text-xs text-blue-200 lg:block">Already have an account? Close registration and sign in.</div>
+            </aside>
+
+            <main className="relative flex min-h-screen bg-white text-slate-800">
+              <button type="button" onClick={closeRegistration} className="absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close registration"><X className="h-5 w-5" /></button>
+              <div className="mx-auto flex w-full max-w-3xl flex-col px-6 py-10 sm:px-10 lg:justify-center lg:px-14 lg:py-12 xl:px-20">
+                <div className="mb-8 pr-12">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600">Step {regStep} of 3</p>
+                  <h2 id="registration-title" className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{regStep === 1 ? 'Create your resident account' : regStep === 2 ? 'Verify your email' : 'Registration submitted'}</h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{regStep === 1 ? 'Provide your name, email address, and a secure password to begin.' : regStep === 2 ? `We sent a six-digit verification code to ${regData.email}.` : 'Your details are now ready for administrator review.'}</p>
+                </div>
+
+                <div className="mb-9 flex max-w-xl items-center" aria-label={`Registration step ${regStep} of 3`}>
+                  {['Details', 'Verify', 'Submitted'].map((label, index) => {
+                    const step = index + 1;
+                    const complete = regStep > step;
+                    const active = regStep === step;
+                    return <React.Fragment key={label}><div className="flex items-center gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${complete ? 'border-emerald-500 bg-emerald-500 text-white' : active ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-slate-400'}`}>{complete ? <Check className="h-3.5 w-3.5" /> : step}</span><span className={`hidden text-xs font-semibold sm:inline ${active ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span></div>{index < 2 && <span className={`mx-3 h-px flex-1 ${regStep > step ? 'bg-blue-600' : 'bg-slate-200'}`} />}</React.Fragment>;
+                  })}
+                </div>
+
+                {regError && <div className="mb-5 max-w-xl border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900" role="alert">{regError}</div>}
+
+                {regStep === 1 && (
+                  <form onSubmit={handleRegisterOtpSend} className="max-w-xl space-y-5 text-xs">
+                    <div><label className="mb-1.5 block font-semibold text-slate-700">Full Name</label><input type="text" required autoComplete="name" placeholder="Full name" value={regData.fullName} onChange={(event) => setRegData({ ...regData, fullName: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div>
+                    <div><label className="mb-1.5 block font-semibold text-slate-700">Email Address</label><input type="email" required autoComplete="email" placeholder="Email" value={regData.email} onChange={(event) => setRegData({ ...regData, email: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div>
+                    <div className="grid gap-5 sm:grid-cols-2"><div><label className="mb-1.5 block font-semibold text-slate-700">Password</label><div className="relative"><input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" minLength={12} maxLength={128} placeholder="Create password" value={regData.password} onChange={(event) => setRegData({ ...regData, password: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /><button type="button" onClick={() => setShowRegPassword((visible) => !visible)} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showRegPassword ? 'Hide registration password' : 'Show registration password'}>{showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></div><div><label className="mb-1.5 block font-semibold text-slate-700">Confirm Password</label><input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" placeholder="Confirm password" value={regData.confirmPassword} onChange={(event) => setRegData({ ...regData, confirmPassword: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div></div>
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-2 border-t border-slate-100 pt-4 text-[11px]">{[[passwordChecks.length, '12+ characters'], [passwordChecks.letter, 'Contains a letter'], [passwordChecks.number, 'Contains a number'], [passwordChecks.matches, 'Passwords match']].map(([passed, label]) => <span key={label} className={`flex items-center gap-1.5 ${passed ? 'font-semibold text-emerald-700' : 'text-slate-500'}`}>{passed ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}{label}</span>)}</div>
+                    <label className="flex cursor-pointer items-start gap-2.5 border-t border-slate-100 pt-4 text-[11px] leading-relaxed text-slate-600"><input type="checkbox" checked={regData.acceptedTerms} onChange={(event) => setRegData({ ...regData, acceptedTerms: event.target.checked })} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" /><span>I agree to the <a href="/terms-and-conditions" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Terms and Conditions</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Privacy Policy</a>.</span></label>
+                    <div className="flex justify-end pt-2"><button type="submit" disabled={regBusy} className="flex min-h-11 w-full items-center justify-center gap-2 bg-blue-600 px-7 py-3 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">{regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Continue to verification</button></div>
+                  </form>
+                )}
+
+                {regStep === 2 && (
+                  <form onSubmit={handleRegisterVerify} className="max-w-xl space-y-7 text-xs"><div className="flex items-start gap-4 border-b border-slate-200 pb-6"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600"><Mail className="h-4 w-4" /></div><div><p className="font-bold text-slate-900">Check your inbox</p><p className="mt-1 leading-5 text-slate-500">The code expires after 15 minutes. You may edit your details if the email is incorrect.</p></div></div><div><label className="mb-2 block font-semibold text-slate-700">Six-digit verification code</label><input type="text" required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" minLength={6} maxLength={6} placeholder="000000" value={regOtp} onChange={(event) => setRegOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full max-w-xs border-b-2 border-slate-300 bg-transparent px-0 py-3 text-2xl font-black tracking-[0.35em] text-slate-900 outline-none focus:border-blue-600" /></div><div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-5"><button type="button" onClick={() => { setRegStep(1); setRegOtp(''); setRegVerificationToken(''); setRegError(''); }} className="flex items-center gap-1 font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft className="h-3.5 w-3.5" /> Edit details</button><button type="button" onClick={handleRegisterResend} disabled={regBusy || regResendSeconds > 0} className="font-semibold text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400">{regResendSeconds > 0 ? `Resend in ${regResendSeconds}s` : 'Resend code'}</button></div><button type="submit" disabled={regBusy || regOtp.length !== 6} className="flex min-h-11 items-center justify-center gap-2 bg-blue-600 px-7 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Verify and submit</button></div></form>
+                )}
+
+                {regStep === 3 && (
+                  <div className="max-w-xl"><div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-7 w-7" /></div><p className="text-sm leading-6 text-slate-600">Your email has been verified. An NHAI administrator will review your account before you can sign in.</p><div className="my-7 border-y border-slate-200 py-5 text-sm text-slate-600"><p className="font-bold text-slate-900">What happens next</p><p className="mt-2 leading-6">You will receive an update after approval. Use <strong>{regData.email}</strong> when signing in.</p></div><button type="button" onClick={closeRegistration} className="bg-blue-600 px-7 py-3 text-xs font-bold text-white transition hover:bg-blue-700">Return to sign in</button></div>
+                )}
+              </div>
+            </main>
           </div>
         </div>
       )}

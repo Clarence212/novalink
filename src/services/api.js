@@ -84,10 +84,10 @@ export async function apiChangePassword(currentPassword, newPassword) {
   return result;
 }
 
-export async function apiSendOtp(email, name = 'User', type = 'registration', contactNumber = '', blockLot = '') {
+export async function apiSendOtp(email, name = 'User', type = 'registration', contactNumber = '') {
   return request('send_otp.php', {
     method: 'POST',
-    body: { email, name, type, contactNumber, blockLot },
+    body: { email, name, type, contactNumber },
   });
 }
 
