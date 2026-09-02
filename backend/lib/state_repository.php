@@ -467,53 +467,6 @@ function fetch_notifications(PDO $pdo): array
     )->fetchAll();
 }
 
-function fetch_registration_requests(PDO $pdo): array
-{
-    $rows = $pdo->query(
-        "SELECT token.token_id AS tokenId, token.email, token.full_name AS fullName,
-                token.contact_number AS contactNumber, token.verified_at AS verifiedAt,
-                token.expires_at AS expiresAt, token.created_at AS requestedAt,
-                CASE WHEN token.expires_at > UTC_TIMESTAMP() THEN 1 ELSE 0 END AS tokenActive,
-                (
-                    SELECT JSON_UNQUOTE(JSON_EXTRACT(match_failure.after_json, '$.blockLot'))
-                    FROM audit_logs match_failure
-                    WHERE match_failure.action_name = 'registration.match_failed'
-                      AND match_failure.entity_type = 'email_verification_token'
-                      AND match_failure.entity_id = token.token_id
-                    ORDER BY match_failure.created_at DESC, match_failure.audit_id DESC
-                    LIMIT 1
-                ) AS blockLot
-         FROM email_verification_tokens token
-         LEFT JOIN users user_account ON user_account.email = token.email
-         WHERE token.purpose = 'registration'
-           AND token.verified_at IS NOT NULL
-           AND token.consumed_at IS NULL
-           AND user_account.user_id IS NULL
-           AND NOT EXISTS (
-               SELECT 1
-               FROM audit_logs reconciliation_audit
-               WHERE reconciliation_audit.action_name = 'registration.reconcile'
-                 AND JSON_UNQUOTE(JSON_EXTRACT(reconciliation_audit.after_json, '$.registrationTokenId')) = token.token_id
-           )
-           AND NOT EXISTS (
-               SELECT 1
-               FROM email_verification_tokens newer
-               WHERE newer.email = token.email
-                 AND newer.purpose = 'registration'
-                 AND newer.verified_at IS NOT NULL
-                 AND newer.consumed_at IS NULL
-                 AND newer.created_at > token.created_at
-           )
-         ORDER BY token.created_at DESC
-         LIMIT 100"
-    )->fetchAll();
-
-    foreach ($rows as &$row) {
-        $row['tokenActive'] = (bool) $row['tokenActive'];
-    }
-    return $rows;
-}
-
 function fetch_payment_qr(PDO $pdo): array
 {
     $row = $pdo->query(
@@ -532,7 +485,6 @@ function fetch_application_state(PDO $pdo, array $user): array
     $visitorPassesReady = visitor_passes_available($pdo);
     $state = [
         'users' => $role === 'admin' ? fetch_users($pdo) : [],
-        'registrationRequests' => $role === 'admin' ? fetch_registration_requests($pdo) : [],
         'homeowners' => $role === 'admin' ? fetch_homeowners($pdo) : ($role === 'resident' ? fetch_homeowners($pdo, $homeownerId) : []),
         'vehicles' => $role === 'admin' ? fetch_vehicles($pdo) : ($role === 'resident' ? fetch_vehicles($pdo, $homeownerId) : []),
         'reservations' => $role === 'admin' ? fetch_reservations($pdo) : ($role === 'resident' ? fetch_reservations($pdo, $homeownerId) : []),

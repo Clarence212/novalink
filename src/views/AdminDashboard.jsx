@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   ArrowRight, BarChart3, Bell, Calendar, Car, ClipboardList, CreditCard,
-  Eye, Home, MessageSquare, Search, ShieldCheck, UserCheck, Users,
+  Eye, Home, MessageSquare, ShieldCheck, UserCheck, Users,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Button, EmptyState, PageHeader, StatCard } from '../components/ui/Primitives';
@@ -22,7 +22,7 @@ const formatActivityTime = (value) => {
 
 export const AdminDashboard = ({ setActiveView }) => {
   const {
-    currentUser, homeowners, registrationRequests, reservations, dues, payments,
+    currentUser, homeowners, reservations, dues, payments,
     concerns, users, vehicles, stickerRenewals, visitorLogs,
   } = useApp();
 
@@ -32,8 +32,7 @@ export const AdminDashboard = ({ setActiveView }) => {
   const openConcerns = concerns.filter((concern) => concern.status !== 'resolved').length;
   const pendingVehicles = vehicles.filter((vehicle) => vehicle.approvalStatus === 'pending').length;
   const pendingStickers = stickerRenewals.filter((renewal) => renewal.status === 'pending').length;
-  const unlinkedResidents = users.filter((user) => user.role === 'resident' && !user.homeownerId).length;
-  const reconciliationCount = registrationRequests.length + unlinkedResidents;
+  const activeResidents = users.filter((user) => user.role === 'resident' && user.status === 'active').length;
   const outstanding = dues.reduce((sum, due) => sum + Number(due.balanceDue || 0), 0);
   const delinquent = new Set(dues.filter((due) => Number(due.daysOverdue) > 0 && Number(due.balanceDue) > 0).map((due) => due.homeownerId)).size;
   const onSite = visitorLogs.filter((log) => !log.exitTime).length;
@@ -41,7 +40,6 @@ export const AdminDashboard = ({ setActiveView }) => {
   const attention = [
     { id: 'payment', label: 'Payment proofs', detail: 'Awaiting validation', count: pendingPayments, view: 'dues', icon: CreditCard, tone: 'emerald' },
     { id: 'accounts', label: 'User approvals', detail: 'Pending account decision', count: pendingUsers, view: 'user-management', icon: UserCheck, tone: 'amber' },
-    { id: 'matching', label: 'Account matches', detail: 'Need homeowner reconciliation', count: reconciliationCount, view: 'account-reconciliation', icon: Search, tone: 'cyan' },
     { id: 'reservation', label: 'Reservations', detail: 'Awaiting review', count: pendingReservations, view: 'reservations', icon: Calendar, tone: 'violet' },
     { id: 'concern', label: 'Resident concerns', detail: 'Still open', count: openConcerns, view: 'concerns', icon: MessageSquare, tone: 'blue' },
     { id: 'vehicle', label: 'Vehicle records', detail: 'Awaiting approval', count: pendingVehicles, view: 'vehicles', icon: Car, tone: 'amber' },
@@ -70,7 +68,6 @@ export const AdminDashboard = ({ setActiveView }) => {
   const modules = [
     { id: 'homeowners', label: 'Homeowners', description: 'Master records and households', icon: Home },
     { id: 'user-management', label: 'Accounts', description: 'Users, roles, and access', icon: Users },
-    { id: 'account-reconciliation', label: 'Account Matching', description: 'Registration and duplicate review', icon: Search },
     { id: 'dues', label: 'Dues & Payments', description: 'Billing and reconciliation', icon: CreditCard },
     { id: 'reservations', label: 'Reservations', description: 'Facility schedule and requests', icon: Calendar },
     { id: 'visitor-management', label: 'Visitor Management', description: 'Gate activity and daily logs', icon: Eye },
@@ -89,7 +86,7 @@ export const AdminDashboard = ({ setActiveView }) => {
         <StatCard label="Outstanding dues" value={outstanding.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })} detail={`${delinquent} homeowner(s) overdue`} icon={CreditCard} tone="red" onClick={() => setActiveView('dues')} />
         <StatCard label="Pending decisions" value={attention.reduce((sum, item) => sum + item.count, 0)} detail={`${attention.length} active work queue(s)`} icon={ShieldCheck} tone="amber" />
         <StatCard label="Visitors on site" value={onSite} detail="Current open gate entries" icon={Eye} tone="blue" onClick={() => setActiveView('visitor-management')} />
-        <StatCard label="Active homeowners" value={homeowners.length} detail={`${reconciliationCount} account match(es) to review`} icon={Home} tone="cyan" onClick={() => setActiveView('homeowners')} />
+        <StatCard label="Active homeowners" value={homeowners.length} detail={`${activeResidents} active resident account(s)`} icon={Home} tone="cyan" onClick={() => setActiveView('homeowners')} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_.8fr]">
@@ -107,7 +104,7 @@ export const AdminDashboard = ({ setActiveView }) => {
                 <span className="text-lg font-extrabold text-slate-100">{item.count}</span><ArrowRight className="h-4 w-4 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-blue-400" />
               </button>;
             })}
-          </div> : <EmptyState icon={ShieldCheck} title="Nothing needs immediate review" description="All current approval and reconciliation queues are clear." />}
+          </div> : <EmptyState icon={ShieldCheck} title="Nothing needs immediate review" description="All current approval and service queues are clear." />}
         </section>
 
         <section className="ui-surface overflow-hidden">

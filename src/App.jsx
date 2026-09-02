@@ -12,7 +12,6 @@ import { ResidentDashboard } from './views/ResidentDashboard';
 import { GuardDashboard } from './views/GuardDashboard';
 import { HomeownersRecords } from './views/HomeownersRecords';
 import { UserManagement } from './views/UserManagement';
-import { AccountReconciliation } from './views/AccountReconciliation';
 import { VisitorManagement } from './views/VisitorManagement';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { FacilityReservations } from './views/FacilityReservations';
@@ -91,7 +90,7 @@ const AppContent = () => {
 
   
   const allowedViews = {
-    admin: new Set(['dashboard', 'homeowners', 'user-management', 'account-reconciliation', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'reports', 'concerns', 'vehicles', 'stickers', 'email-log']),
+    admin: new Set(['dashboard', 'homeowners', 'user-management', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'reports', 'concerns', 'vehicles', 'stickers', 'email-log']),
     security: new Set(['dashboard', 'visitor-management', 'announcements']),
     resident: new Set(['dashboard', 'announcements', 'visitor-management', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers']),
   };
@@ -137,7 +136,6 @@ const AppContent = () => {
     const viewMap = {
       'homeowners': <HomeownersRecords />,
       'user-management': <UserManagement />,
-      'account-reconciliation': <AccountReconciliation onOpenHomeowners={() => handleSetView('homeowners')} />,
       'visitor-management': <VisitorManagement />,
       'announcements': <AnnouncementsView />,
       'reservations': <FacilityReservations />,

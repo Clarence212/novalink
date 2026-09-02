@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BarChart3, Bell, Calendar, Car, ChevronDown, ClipboardList, CreditCard,
-  Eye, Home, LayoutDashboard, Lock, MessageSquare, Search, Shield, Users,
+  Eye, Home, LayoutDashboard, Lock, MessageSquare, Shield, Users,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -13,7 +13,6 @@ const adminGroups = [
   { id: 'community', label: 'Community', items: [
     { id: 'homeowners', label: "Homeowners' Records", icon: Home },
     { id: 'user-management', label: 'User Management', icon: Users },
-    { id: 'account-reconciliation', label: 'Account Matching', icon: Search },
   ] },
   { id: 'finance', label: 'Finance', items: [
     { id: 'dues', label: 'Dues & Payments', icon: CreditCard },

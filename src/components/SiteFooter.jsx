@@ -19,7 +19,7 @@ export const SiteFooter = () => {
               <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-400">Public Beta</p>
             </div>
           </div>
-          <p className="mt-4 text-xs leading-5">© {year} Novaville Homeowners Association, Inc.</p>
+          <p className="mt-4 text-xs leading-5">© {year} All Rights Reserved. Novaville Homeowners Association, Inc.</p>
           <p className="text-xs leading-5 text-slate-500">Secure community services for Novaville residents.</p>
         </div>
 

@@ -157,7 +157,6 @@ const Section = ({ title, description, action, children }) => (
 export const ReportingDashboard = ({ setActiveView }) => {
   const {
     homeowners,
-    registrationRequests,
     reservations,
     dues,
     payments,
@@ -268,7 +267,6 @@ export const ReportingDashboard = ({ setActiveView }) => {
 
     const pendingTasks = [
       { key: 'users', label: 'User approvals', value: users.filter((user) => user.status === 'pending').length, view: 'user-management' },
-      { key: 'matching', label: 'Account matching', value: registrationRequests.length + users.filter((user) => user.role === 'resident' && !user.homeownerId).length, view: 'account-reconciliation' },
       { key: 'payments', label: 'Payment validation', value: payments.filter((payment) => payment.validationStatus === 'pending').length, view: 'dues' },
       { key: 'reservations', label: 'Reservation review', value: reservations.filter((reservation) => reservation.status === 'pending').length, view: 'reservations' },
       { key: 'concerns', label: 'Open concerns', value: concerns.filter((concern) => concern.status !== 'resolved').length, view: 'concerns' },
@@ -299,7 +297,7 @@ export const ReportingDashboard = ({ setActiveView }) => {
       pendingTasks,
       pendingTaskTotal: pendingTasks.reduce((sum, task) => sum + task.value, 0),
     };
-  }, [concerns, dues, facilities, fromDate, homeowners, payments, registrationRequests, reservations, stickerRenewals, toDate, users, vehicles, visitorLogs]);
+  }, [concerns, dues, facilities, fromDate, homeowners, payments, reservations, stickerRenewals, toDate, users, vehicles, visitorLogs]);
 
   const applyRange = (days) => {
     setToDate(today);

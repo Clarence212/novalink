@@ -56,7 +56,7 @@ export const HomeownersRecords = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <PageHeader eyebrow="Community records" title="Homeowners' Master Records" description="The authoritative registry used for account matching and resident services." actions={<button type="button" onClick={openCreate} className="ui-button bg-blue-600 text-white hover:bg-blue-500">
+      <PageHeader eyebrow="Community records" title="Homeowners' Master Records" description="The authoritative registry for resident services and association records." actions={<button type="button" onClick={openCreate} className="ui-button bg-blue-600 text-white hover:bg-blue-500">
           <Plus className="w-4 h-4" /> Add Homeowner
         </button>} />
 

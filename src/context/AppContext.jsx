@@ -19,7 +19,6 @@ const AppContext = createContext(null);
 
 const EMPTY_STATE = {
   users: [],
-  registrationRequests: [],
   homeowners: [],
   vehicles: [],
   reservations: [],
@@ -228,18 +227,6 @@ export const AppProvider = ({ children }) => {
     { id },
     'A new account-verification code was emailed.',
   );
-  const resolveRegistrationMatch = (payload) => runAction(
-    'reconciliation',
-    'resolve-registration',
-    payload,
-    'Homeowner record aligned. The resident can retry registration.',
-  );
-  const linkResidentAccount = (payload) => runAction(
-    'reconciliation',
-    'link-user',
-    payload,
-    'Resident account linked to the homeowner record.',
-  );
 
   const addVisitorLog = (payload) => runAction('visitors', 'create', payload, 'Visitor entry saved.');
   const updateVisitorExit = (id) => runAction('visitors', 'exit', { id }, 'Visitor exit recorded.');
@@ -336,8 +323,6 @@ export const AppProvider = ({ children }) => {
     unlockUser,
     forceUserPasswordReset,
     resendUserVerification,
-    resolveRegistrationMatch,
-    linkResidentAccount,
     addVisitorLog,
     updateVisitorExit,
     createVisitorPass,
