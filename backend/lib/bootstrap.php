@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/database.php';
 
 const NOVALINK_MAX_JSON_BYTES = 1_048_576;
+const NOVALINK_REMEMBER_SESSION_SECONDS = 2_592_000;
 
 function request_id(): string
 {
@@ -92,6 +93,7 @@ function start_secure_session(): void
     if ($sessionPath !== '' && is_dir($sessionPath) && is_writable($sessionPath)) {
         session_save_path($sessionPath);
     }
+    ini_set('session.gc_maxlifetime', (string) NOVALINK_REMEMBER_SESSION_SECONDS);
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
@@ -106,11 +108,27 @@ function start_secure_session(): void
 
     $now = time();
     $lastSeen = (int) ($_SESSION['last_seen_at'] ?? 0);
-    if ($lastSeen > 0 && ($now - $lastSeen) > 1800) {
+    $idleTimeout = !empty($_SESSION['remember_me']) ? NOVALINK_REMEMBER_SESSION_SECONDS : 1800;
+    if ($lastSeen > 0 && ($now - $lastSeen) > $idleTimeout) {
         $_SESSION = [];
         session_regenerate_id(true);
     }
     $_SESSION['last_seen_at'] = $now;
+}
+
+function set_session_cookie_persistence(bool $remember): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE || !ini_get('session.use_cookies')) {
+        return;
+    }
+
+    setcookie(session_name(), session_id(), [
+        'expires' => $remember ? time() + NOVALINK_REMEMBER_SESSION_SECONDS : 0,
+        'path' => '/',
+        'secure' => is_https_request(),
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
 }
 
 function json_response(array $payload, int $status = 200): void

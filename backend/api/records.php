@@ -439,7 +439,7 @@ try {
                     $changes[] = "Your NovaLink role is now {$role}.";
                 }
                 if ($emailChanged) {
-                    $changes[] = 'Your account email was changed and must be verified before your next sign-in. Ask an NHAI administrator to send the verification code, then use Verify Account Email on the sign-in page.';
+                    $changes[] = 'Your account email was changed and must be verified before your next sign-in. Ask an NHAI administrator to send the verification code, then attempt to sign in with the new email to enter that code.';
                 }
                 $response['emailDelivered'] = safe_notification(
                     $pdo,

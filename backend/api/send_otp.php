@@ -16,6 +16,7 @@ try {
     $purpose = $type === 'reset' ? 'password_reset' : $type;
     $name = trim((string) ($input['name'] ?? 'User'));
     $contactNumber = trim((string) ($input['contactNumber'] ?? ''));
+    $blockLot = trim((string) ($input['blockLot'] ?? ''));
     if ($name === '' || mb_strlen($name) > 120) {
         $name = 'User';
     }
@@ -34,6 +35,26 @@ try {
         $check->execute([$email]);
         if ($check->fetch()) {
             json_response(['error' => 'An account already exists for this email address.'], 409);
+        }
+        if ($blockLot === '' || mb_strlen($blockLot) > 100) {
+            json_response(['error' => 'Enter the block and lot recorded with NHAI.'], 422);
+        }
+        $blockLotKey = strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $blockLot));
+        if ($blockLotKey === '') {
+            json_response(['error' => 'Block and lot must contain letters or numbers.'], 422);
+        }
+        $homeowner = $pdo->prepare(
+            "SELECT homeowner_id FROM homeowners
+             WHERE email = ?
+               AND REGEXP_REPLACE(LOWER(block_lot), '[^a-z0-9]', '') = ?
+               AND user_id IS NULL AND record_status = 'active' LIMIT 1"
+        );
+        $homeowner->execute([$email, $blockLotKey]);
+        if (!$homeowner->fetchColumn()) {
+            json_response([
+                'error' => 'The email and block/lot do not match the current NHAI homeowner record. Check the details or contact the office before requesting a code.',
+                'code' => 'HOMEOWNER_DETAILS_MISMATCH',
+            ], 422);
         }
     }
 

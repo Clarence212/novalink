@@ -125,9 +125,9 @@ export const AppProvider = ({ children }) => {
     }
   }, [currentUser, showToast]);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, rememberMe = false) => {
     try {
-      const result = await apiLogin(email, password);
+      const result = await apiLogin(email, password, rememberMe);
       setCurrentUser(result.user);
       setGuestMode(false);
       if (result.user.forcePasswordChange) {
@@ -137,7 +137,11 @@ export const AppProvider = ({ children }) => {
       }
       return { success: true };
     } catch (error) {
-      return { success: false, message: error.message || 'Sign-in failed.' };
+      return {
+        success: false,
+        message: error.message || 'Sign-in failed.',
+        code: error.payload?.code || '',
+      };
     }
   }, [applyState]);
 

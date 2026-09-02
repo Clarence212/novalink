@@ -46,8 +46,11 @@ export async function apiSession() {
   return result;
 }
 
-export async function apiLogin(email, password) {
-  const result = await request('auth.php', { method: 'POST', body: { action: 'login', email, password } });
+export async function apiLogin(email, password, rememberMe = false) {
+  const result = await request('auth.php', {
+    method: 'POST',
+    body: { action: 'login', email, password, rememberMe },
+  });
   setCsrfToken(result.csrfToken);
   return result;
 }
@@ -81,10 +84,10 @@ export async function apiChangePassword(currentPassword, newPassword) {
   return result;
 }
 
-export async function apiSendOtp(email, name = 'User', type = 'registration', contactNumber = '') {
+export async function apiSendOtp(email, name = 'User', type = 'registration', contactNumber = '', blockLot = '') {
   return request('send_otp.php', {
     method: 'POST',
-    body: { email, name, type, contactNumber },
+    body: { email, name, type, contactNumber, blockLot },
   });
 }
 

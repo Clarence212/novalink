@@ -28,6 +28,7 @@ try {
     if ($action === 'login') {
         $email = normalize_email($input['email'] ?? '');
         $password = (string) ($input['password'] ?? '');
+        $rememberMe = filter_var($input['rememberMe'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $loginRateAction = 'login:' . substr(hash('sha256', $email), 0, 32);
         enforce_rate_limit($pdo, $loginRateAction, $email, 5, 900, 900);
 
@@ -60,13 +61,18 @@ try {
             json_response(['error' => 'This account is not active. Contact the NHAI office.'], 403);
         }
         if (!(bool) $record['email_verified']) {
-            json_response(['error' => 'Verify your email address before signing in.'], 403);
+            json_response([
+                'error' => 'Verify your email address before signing in.',
+                'code' => 'EMAIL_VERIFICATION_REQUIRED',
+            ], 403);
         }
 
         session_regenerate_id(true);
         $_SESSION['user_id'] = $record['user_id'];
         $_SESSION['last_seen_at'] = time();
+        $_SESSION['remember_me'] = $rememberMe;
         unset($_SESSION['guest_profile_id']);
+        set_session_cookie_persistence($rememberMe);
         csrf_token();
         $update = $pdo->prepare(
             'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = UTC_TIMESTAMP() WHERE user_id = ?'

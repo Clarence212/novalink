@@ -95,7 +95,7 @@ const DOCUMENTS = {
         title: '5. Cookies and session security',
         paragraphs: [
           'NovaLink uses necessary cookies to maintain secure sign-in sessions, protect requests, and remember cookie preferences. These cookies support essential portal functions and are not used for advertising.',
-          'A sign-in session ends after logout, browser-session closure, or the configured inactivity period. Users should sign out before leaving a shared or public device.',
+          'A standard sign-in session ends after logout, browser-session closure, or the configured inactivity period. When Remember me is selected, the secure session may remain available on that device for up to 30 days. Users should never select it on a shared or public device and should always sign out when finished.',
         ],
       },
       {

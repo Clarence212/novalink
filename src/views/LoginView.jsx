@@ -1,8 +1,32 @@
-import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, Bell, UserCheck, ArrowRight, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  Bell,
+  Check,
+  CheckCircle2,
+  Circle,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  Mail,
+  ShieldCheck,
+  UserCheck,
+  Users,
+  X,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { apiSendOtp, apiVerifyOtp } from '../services/api';
 import { SiteFooter } from '../components/SiteFooter';
+
+const EMPTY_REGISTRATION = {
+  fullName: '',
+  email: '',
+  blockLot: '',
+  password: '',
+  confirmPassword: '',
+  acceptedTerms: false,
+};
 
 export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const { login, setIsGuestMode, showToast, createUserAccount, updatePassword } = useApp();
@@ -10,21 +34,17 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-
+  const [rememberMe, setRememberMe] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
 
-
-  const [regData, setRegData] = useState({
-    fullName: '',
-    email: '',
-    blockLot: '',
-    password: ''
-  });
+  const [regData, setRegData] = useState(EMPTY_REGISTRATION);
   const [regStep, setRegStep] = useState(1);
   const [regOtp, setRegOtp] = useState('');
   const [regVerificationToken, setRegVerificationToken] = useState('');
-
+  const [regBusy, setRegBusy] = useState(false);
+  const [regError, setRegError] = useState('');
+  const [regResendSeconds, setRegResendSeconds] = useState(0);
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStep, setForgotStep] = useState(1);
@@ -34,10 +54,51 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [accountVerificationEmail, setAccountVerificationEmail] = useState('');
   const [accountVerificationOtp, setAccountVerificationOtp] = useState('');
 
+  useEffect(() => {
+    if (regResendSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setRegResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [regResendSeconds]);
+
+  const passwordChecks = {
+    length: regData.password.length >= 12,
+    letter: /[A-Za-z]/.test(regData.password),
+    number: /\d/.test(regData.password),
+    matches: Boolean(regData.confirmPassword) && regData.password === regData.confirmPassword,
+  };
+
+  const resetRegistration = () => {
+    setRegData(EMPTY_REGISTRATION);
+    setRegStep(1);
+    setRegOtp('');
+    setRegVerificationToken('');
+    setRegBusy(false);
+    setRegError('');
+    setRegResendSeconds(0);
+    setShowRegPassword(false);
+  };
+
+  const openRegistration = () => {
+    resetRegistration();
+    setActiveModal('register');
+  };
+
+  const closeRegistration = () => {
+    setActiveModal(null);
+    resetRegistration();
+  };
+
   const handleSignIn = async (e) => {
     e.preventDefault();
-    const result = await login(email, password);
+    const result = await login(email, password, rememberMe);
     if (!result.success) {
+      if (result.code === 'EMAIL_VERIFICATION_REQUIRED') {
+        setAccountVerificationEmail(email.trim());
+        setAccountVerificationOtp('');
+        setActiveModal('verify-account');
+      }
       showToast(result.message, 'warning');
       return;
     }
@@ -53,18 +114,70 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
   const handleRegisterOtpSend = async (e) => {
     e.preventDefault();
+    const normalized = {
+      fullName: regData.fullName.trim(),
+      email: regData.email.trim().toLowerCase(),
+      blockLot: regData.blockLot.trim(),
+    };
+
+    if (!normalized.fullName || !normalized.email || !normalized.blockLot) {
+      setRegError('Complete your name, email, and block/lot details.');
+      return;
+    }
+    if (!passwordChecks.length || !passwordChecks.letter || !passwordChecks.number) {
+      setRegError('Use at least 12 characters with at least one letter and one number.');
+      return;
+    }
+    if (!passwordChecks.matches) {
+      setRegError('The passwords do not match.');
+      return;
+    }
+    if (!regData.acceptedTerms) {
+      setRegError('Accept the Terms and Conditions and Privacy Policy to continue.');
+      return;
+    }
+
+    setRegBusy(true);
+    setRegError('');
     try {
-      await apiSendOtp(regData.email, regData.fullName || 'User', 'registration');
+      await apiSendOtp(normalized.email, normalized.fullName, 'registration', '', normalized.blockLot);
+      setRegData((current) => ({ ...current, ...normalized }));
       setRegVerificationToken('');
       setRegStep(2);
+      setRegResendSeconds(60);
       showToast('Verification code sent to your email address.', 'info');
     } catch (error) {
-      showToast(error.message || 'Failed to send OTP.', 'warning');
+      const message = error.message || 'Failed to send the verification code.';
+      setRegError(message);
+      showToast(message, 'warning');
+    } finally {
+      setRegBusy(false);
+    }
+  };
+
+  const handleRegisterResend = async () => {
+    if (regBusy || regResendSeconds > 0) return;
+    setRegBusy(true);
+    setRegError('');
+    try {
+      await apiSendOtp(regData.email, regData.fullName, 'registration', '', regData.blockLot);
+      setRegOtp('');
+      setRegVerificationToken('');
+      setRegResendSeconds(60);
+      showToast('A new verification code was sent.', 'info');
+    } catch (error) {
+      const message = error.message || 'Failed to resend the verification code.';
+      setRegError(message);
+      showToast(message, 'warning');
+    } finally {
+      setRegBusy(false);
     }
   };
 
   const handleRegisterVerify = async (e) => {
     e.preventDefault();
+    setRegBusy(true);
+    setRegError('');
     try {
       let verificationToken = regVerificationToken;
       if (!verificationToken) {
@@ -73,18 +186,24 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
         setRegVerificationToken(verificationToken);
       }
       const result = await createUserAccount(
-        { ...regData, role: 'resident' },
+        {
+          fullName: regData.fullName,
+          email: regData.email,
+          blockLot: regData.blockLot,
+          password: regData.password,
+          role: 'resident',
+        },
         verificationToken,
       );
       if (!result.success) throw new Error(result.message || 'Registration failed.');
-      showToast('Email verified successfully! Your account is pending NHAI Admin approval.', 'success');
-      setActiveModal(null);
-      setRegStep(1);
-      setRegData({ fullName: '', email: '', blockLot: '', password: '' });
-      setRegOtp('');
-      setRegVerificationToken('');
+      setRegStep(3);
+      showToast('Registration submitted for NHAI administrator approval.', 'success');
     } catch (error) {
-      showToast(error.message || 'Invalid verification code entered.', 'warning');
+      const message = error.message || 'The verification code is invalid or expired.';
+      setRegError(message);
+      showToast(message, 'warning');
+    } finally {
+      setRegBusy(false);
     }
   };
 
@@ -231,7 +350,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     type="email"
                     required
                     autoComplete="email"
-                    placeholder="your.email@example.com"
+                    placeholder="Email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
@@ -247,7 +366,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     type={showPassword ? 'text' : 'password'}
                     required
                     autoComplete="current-password"
-                    placeholder="Enter your password"
+                    placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
@@ -266,13 +385,18 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
               { }
               <div className="flex items-center justify-between gap-3 text-xs pt-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('verify-account')}
-                  className="text-blue-600 hover:text-blue-700 font-semibold text-xs transition"
-                >
-                  Verify account email
-                </button>
+                <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-600">
+                  <span className="relative h-4 w-4 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(event) => setRememberMe(event.target.checked)}
+                      className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-slate-300 bg-white transition checked:border-blue-600 checked:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    />
+                    <Check className="pointer-events-none absolute left-0.5 top-0.5 h-3 w-3 text-white opacity-0 transition peer-checked:opacity-100" strokeWidth={3} aria-hidden="true" />
+                  </span>
+                  Remember me
+                </label>
                 <button
                   type="button"
                   onClick={() => setActiveModal('forgot')}
@@ -295,7 +419,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
             <div className="text-center text-xs text-slate-600 my-5">
               Don't have an account?{' '}
               <button
-                onClick={() => setActiveModal('register')}
+                onClick={openRegistration}
                 className="text-blue-600 hover:text-blue-700 font-bold underline underline-offset-2 transition"
               >
                 Register as Resident
@@ -372,109 +496,114 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
       {/* REGISTRATION MODAL */}
       {activeModal === 'register' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm" role="presentation">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 text-slate-800" role="dialog" aria-modal="true" aria-labelledby="registration-title">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 id="registration-title" className="text-lg font-bold text-slate-900">Resident Account Registration</h3>
-              <button onClick={() => { setActiveModal(null); setRegStep(1); setRegData({ fullName: '', email: '', blockLot: '', password: '' }); setRegOtp(''); setRegVerificationToken(''); }} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm" role="presentation">
+          <div className="my-4 w-full max-w-lg rounded-3xl border border-slate-100 bg-white p-6 text-slate-800 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="registration-title">
+            <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600">Resident access</p>
+                <h3 id="registration-title" className="text-xl font-bold text-slate-900">Create your NovaLink account</h3>
+                <p className="mt-1 text-xs text-slate-500">Use the same email and block/lot listed in the NHAI homeowner record.</p>
+              </div>
+              <button type="button" onClick={closeRegistration} className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Close registration">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {regStep === 1 ? (
+            <div className="mb-5 grid grid-cols-3 gap-2" aria-label={`Registration step ${regStep} of 3`}>
+              {['Details', 'Verify', 'Submitted'].map((label, index) => {
+                const step = index + 1;
+                const complete = regStep > step;
+                const active = regStep === step;
+                return (
+                  <div key={label} className="min-w-0">
+                    <div className={`mb-1.5 h-1.5 rounded-full ${complete || active ? 'bg-blue-600' : 'bg-slate-200'}`} />
+                    <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${active ? 'text-blue-700' : complete ? 'text-slate-700' : 'text-slate-400'}`}>
+                      {complete ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <Circle className={`h-3.5 w-3.5 shrink-0 ${active ? 'fill-blue-100' : ''}`} />}
+                      <span className="truncate">{label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {regError && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-900" role="alert">{regError}</div>}
+
+            {regStep === 1 && (
               <form onSubmit={handleRegisterOtpSend} className="space-y-3 text-xs">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your full name"
-                    value={regData.fullName}
-                    onChange={(e) => setRegData({ ...regData, fullName: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block font-semibold text-slate-700">Full Name</label>
+                    <input type="text" required autoComplete="name" placeholder="Full name" value={regData.fullName} onChange={(event) => setRegData({ ...regData, fullName: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Email Address</label>
+                    <input type="email" required autoComplete="email" placeholder="Email" value={regData.email} onChange={(event) => setRegData({ ...regData, email: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Block & Lot</label>
+                    <input type="text" required placeholder="e.g. Block 1, Lot 5" value={regData.blockLot} onChange={(event) => setRegData({ ...regData, blockLot: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Password</label>
+                    <div className="relative">
+                      <input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" minLength={12} maxLength={128} placeholder="Create password" value={regData.password} onChange={(event) => setRegData({ ...regData, password: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 pr-9 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                      <button type="button" onClick={() => setShowRegPassword((visible) => !visible)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showRegPassword ? 'Hide registration password' : 'Show registration password'}>
+                        {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">Confirm Password</label>
+                    <input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" placeholder="Confirm password" value={regData.confirmPassword} onChange={(event) => setRegData({ ...regData, confirmPassword: event.target.value })} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 transition focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Enter your email address"
-                    value={regData.email}
-                    onChange={(e) => setRegData({ ...regData, email: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-slate-50 p-3 text-[11px]">
+                  {[[passwordChecks.length, '12+ characters'], [passwordChecks.letter, 'Contains a letter'], [passwordChecks.number, 'Contains a number'], [passwordChecks.matches, 'Passwords match']].map(([passed, label]) => (
+                    <span key={label} className={`flex items-center gap-1.5 ${passed ? 'font-medium text-emerald-700' : 'text-slate-500'}`}>
+                      {passed ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}{label}
+                    </span>
+                  ))}
                 </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Block & Lot Address</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Block 1, Lot 5"
-                    value={regData.blockLot}
-                    onChange={(e) => setRegData({ ...regData, blockLot: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Password</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={12}
-                    maxLength={128}
-                    pattern="(?=.*[A-Za-z])(?=.*\d).{12,128}"
-                    title="Use 12–128 characters with at least one letter and one number."
-                    placeholder="••••••••"
-                    value={regData.password}
-                    onChange={(e) => setRegData({ ...regData, password: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition mt-2"
-                >
-                  Send OTP Email Verification Code
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 text-[11px] leading-relaxed text-slate-600">
+                  <input type="checkbox" checked={regData.acceptedTerms} onChange={(event) => setRegData({ ...regData, acceptedTerms: event.target.checked })} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" />
+                  <span>I agree to the <a href="/terms-and-conditions" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Terms and Conditions</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Privacy Policy</a>.</span>
+                </label>
+
+                <button type="submit" disabled={regBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                  {regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Continue to email verification
                 </button>
               </form>
-            ) : (
-              <form onSubmit={handleRegisterVerify} className="space-y-3 text-xs">
-                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
-                  <Mail className="w-4 h-4 shrink-0 text-blue-600" />
-                  <span>{regVerificationToken ? 'Email verified. If the office corrected your homeowner record, retry the registration below.' : <>Verification code sent to <strong>{regData.email}</strong>. Please check your inbox.</>}</span>
+            )}
+
+            {regStep === 2 && (
+              <form onSubmit={handleRegisterVerify} className="space-y-4 text-xs">
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900">
+                  <div className="flex items-start gap-3"><div className="rounded-xl bg-blue-600 p-2 text-white"><Mail className="h-4 w-4" /></div><div><p className="font-bold">Check your email</p><p className="mt-1 leading-relaxed">Enter the six-digit code sent to <strong>{regData.email}</strong>. The code expires after 15 minutes.</p></div></div>
                 </div>
-                {!regVerificationToken && <div>
-                  <label className="block font-medium text-slate-700 mb-1">Enter Verification Code</label>
-                  <input
-                    type="text"
-                    required
-                    inputMode="numeric"
-                    pattern="\d{6}"
-                    minLength={6}
-                    maxLength={6}
-                    placeholder="6-digit code"
-                    value={regOtp}
-                    onChange={(e) => setRegOtp(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-center font-bold text-base focus:outline-none focus:border-blue-600"
-                  />
-                </div>}
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition mt-2"
-                >
-                  {regVerificationToken ? 'Retry Registration' : 'Verify & Submit Registration'}
+                <div>
+                  <label className="mb-1.5 block font-semibold text-slate-700">Verification Code</label>
+                  <input type="text" required inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" minLength={6} maxLength={6} placeholder="000000" value={regOtp} onChange={(event) => setRegOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border border-slate-200 p-3 text-center text-xl font-black tracking-[0.35em] text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <button type="submit" disabled={regBusy || regOtp.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                  {regBusy && <Loader2 className="h-4 w-4 animate-spin" />}Verify and submit registration
                 </button>
-                {regVerificationToken && (
-                  <button
-                    type="button"
-                    onClick={() => { setRegStep(1); setRegOtp(''); setRegVerificationToken(''); }}
-                    className="w-full py-2.5 rounded-xl border border-slate-300 hover:border-blue-500 text-slate-600 hover:text-blue-700 font-semibold text-xs transition"
-                  >
-                    Start Over & Request a New Code
-                  </button>
-                )}
+                <div className="flex items-center justify-between gap-3">
+                  <button type="button" onClick={() => { setRegStep(1); setRegOtp(''); setRegVerificationToken(''); setRegError(''); }} className="flex items-center gap-1 font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft className="h-3.5 w-3.5" /> Edit details</button>
+                  <button type="button" onClick={handleRegisterResend} disabled={regBusy || regResendSeconds > 0} className="font-semibold text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400">{regResendSeconds > 0 ? `Resend in ${regResendSeconds}s` : 'Resend code'}</button>
+                </div>
               </form>
+            )}
+
+            {regStep === 3 && (
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-8 w-8" /></div>
+                <h4 className="text-xl font-bold text-slate-900">Registration submitted</h4>
+                <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-slate-600">Your email has been verified. An NHAI administrator will review the account before you can sign in.</p>
+                <div className="my-5 rounded-2xl bg-slate-50 p-4 text-left text-xs text-slate-600"><p className="font-semibold text-slate-800">What happens next?</p><p className="mt-1.5 leading-relaxed">You will receive an update after the account is approved. Use <strong>{regData.email}</strong> when signing in.</p></div>
+                <button type="button" onClick={closeRegistration} className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-700">Return to sign in</button>
+              </div>
             )}
           </div>
         </div>

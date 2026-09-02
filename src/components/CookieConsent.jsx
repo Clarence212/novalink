@@ -58,7 +58,7 @@ export const CookieConsent = () => {
 
       {showDetails && (
         <div id="cookie-consent-details" className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-          <p>Secure session cookies are necessary and cannot be disabled while using the portal.</p>
+          <p>Secure session cookies are necessary and cannot be disabled while using the portal. Selecting Remember me can keep the session available on that device for up to 30 days.</p>
           <p className="mt-1">NovaLink currently does not use advertising or analytics cookies. Your selection is remembered for up to one year.</p>
         </div>
       )}
