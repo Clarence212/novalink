@@ -22,10 +22,7 @@ import { SiteFooter } from '../components/SiteFooter';
 const EMPTY_REGISTRATION = {
   fullName: '',
   email: '',
-<<<<<<< HEAD
   requestedAddress: '',
-=======
->>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
   password: '',
   confirmPassword: '',
   acceptedTerms: false,
@@ -120,18 +117,11 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     const normalized = {
       fullName: regData.fullName.trim(),
       email: regData.email.trim().toLowerCase(),
-<<<<<<< HEAD
       requestedAddress: regData.requestedAddress.trim(),
     };
 
     if (!normalized.fullName || !normalized.email || !normalized.requestedAddress) {
       setRegError('Complete your name, email address, and household address.');
-=======
-    };
-
-    if (!normalized.fullName || !normalized.email) {
-      setRegError('Complete your name and email address.');
->>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
       return;
     }
     if (!passwordChecks.length || !passwordChecks.letter || !passwordChecks.number) {
@@ -199,10 +189,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
         {
           fullName: regData.fullName,
           email: regData.email,
-<<<<<<< HEAD
           requestedAddress: regData.requestedAddress,
-=======
->>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
           password: regData.password,
           role: 'resident',
         },
@@ -542,11 +529,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                 <div className="mb-8 pr-12">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600">Step {regStep} of 3</p>
                   <h2 id="registration-title" className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{regStep === 1 ? 'Create your resident account' : regStep === 2 ? 'Verify your email' : 'Registration submitted'}</h2>
-<<<<<<< HEAD
                   <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{regStep === 1 ? 'Provide your details and household address. An administrator may use the address to suggest an existing household record.' : regStep === 2 ? `We sent a six-digit verification code to ${regData.email}.` : 'Your details are now ready for administrator review.'}</p>
-=======
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{regStep === 1 ? 'Provide your name, email address, and a secure password to begin.' : regStep === 2 ? `We sent a six-digit verification code to ${regData.email}.` : 'Your details are now ready for administrator review.'}</p>
->>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
                 </div>
 
                 <div className="mb-9 flex max-w-xl items-center" aria-label={`Registration step ${regStep} of 3`}>
@@ -564,10 +547,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                   <form onSubmit={handleRegisterOtpSend} className="max-w-xl space-y-5 text-xs">
                     <div><label className="mb-1.5 block font-semibold text-slate-700">Full Name</label><input type="text" required autoComplete="name" placeholder="Full name" value={regData.fullName} onChange={(event) => setRegData({ ...regData, fullName: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div>
                     <div><label className="mb-1.5 block font-semibold text-slate-700">Email Address</label><input type="email" required autoComplete="email" placeholder="Email" value={regData.email} onChange={(event) => setRegData({ ...regData, email: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div>
-<<<<<<< HEAD
                     <div><label className="mb-1.5 block font-semibold text-slate-700">Household Address</label><input type="text" required autoComplete="street-address" maxLength={190} placeholder="Block, lot, and street" value={regData.requestedAddress} onChange={(event) => setRegData({ ...regData, requestedAddress: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /><p className="mt-1.5 text-[11px] leading-4 text-slate-400">Used only to help the administrator find a possible household record. It will not block registration.</p></div>
-=======
->>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
                     <div className="grid gap-5 sm:grid-cols-2"><div><label className="mb-1.5 block font-semibold text-slate-700">Password</label><div className="relative"><input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" minLength={12} maxLength={128} placeholder="Create password" value={regData.password} onChange={(event) => setRegData({ ...regData, password: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 pr-9 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /><button type="button" onClick={() => setShowRegPassword((visible) => !visible)} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={showRegPassword ? 'Hide registration password' : 'Show registration password'}>{showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></div><div><label className="mb-1.5 block font-semibold text-slate-700">Confirm Password</label><input type={showRegPassword ? 'text' : 'password'} required autoComplete="new-password" placeholder="Confirm password" value={regData.confirmPassword} onChange={(event) => setRegData({ ...regData, confirmPassword: event.target.value })} className="w-full border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600" /></div></div>
                     <div className="grid grid-cols-2 gap-x-5 gap-y-2 border-t border-slate-100 pt-4 text-[11px]">{[[passwordChecks.length, '12+ characters'], [passwordChecks.letter, 'Contains a letter'], [passwordChecks.number, 'Contains a number'], [passwordChecks.matches, 'Passwords match']].map(([passed, label]) => <span key={label} className={`flex items-center gap-1.5 ${passed ? 'font-semibold text-emerald-700' : 'text-slate-500'}`}>{passed ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}{label}</span>)}</div>
                     <label className="flex cursor-pointer items-start gap-2.5 border-t border-slate-100 pt-4 text-[11px] leading-relaxed text-slate-600"><input type="checkbox" checked={regData.acceptedTerms} onChange={(event) => setRegData({ ...regData, acceptedTerms: event.target.checked })} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600" /><span>I agree to the <a href="/terms-and-conditions" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Terms and Conditions</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">Privacy Policy</a>.</span></label>
