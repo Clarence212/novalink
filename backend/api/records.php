@@ -318,6 +318,17 @@ try {
                     $pdo->rollBack();
                     json_response(['error' => 'User not found.'], 404);
                 }
+                if ($status === 'active' && $before['role'] === 'resident') {
+                    $homeownerLink = fetch_row(
+                        $pdo,
+                        "SELECT homeowner_id FROM homeowners WHERE user_id = ? AND record_status = 'active' LIMIT 1",
+                        [$id]
+                    );
+                    if (!$homeownerLink) {
+                        $pdo->rollBack();
+                        json_response(['error' => 'Link this resident account to a homeowner record before approval.'], 422);
+                    }
+                }
                 if ($before['role'] === 'admin' && $before['status'] === 'active' && $status !== 'active') {
                     $activeAdmins = $pdo->query(
                         "SELECT u.user_id FROM users u JOIN roles r ON r.role_id = u.role_id

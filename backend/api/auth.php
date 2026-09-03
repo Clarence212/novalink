@@ -139,10 +139,14 @@ try {
 
             $pdo->commit();
             clear_rate_limit($pdo, 'register', $email);
+<<<<<<< HEAD
             audit_log($pdo, $userId, 'user.register', 'user', $userId, null, [
                 'email' => $email,
                 'requestedAddress' => $requestedAddress,
             ]);
+=======
+            audit_log($pdo, $userId, 'user.register', 'user', $userId, null, ['email' => $email]);
+>>>>>>> c3fca0a3127f4cb2f205d5a28ea87666d4df0976
             json_response(['success' => true, 'message' => 'Registration submitted for administrator approval.'], 201);
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) {
