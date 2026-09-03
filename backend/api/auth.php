@@ -101,6 +101,7 @@ try {
     if ($action === 'register') {
         $email = normalize_email($input['email'] ?? '');
         $fullName = required_string($input, 'fullName', 120, 'Full name');
+        $requestedAddress = required_string($input, 'requestedAddress', 190, 'Household address');
         $password = require_password($input['password'] ?? '');
         $verificationToken = required_string($input, 'verificationToken', 256, 'Verification token');
 
@@ -128,17 +129,20 @@ try {
             $userId = uuid_v4();
             $insert = $pdo->prepare(
                 "INSERT INTO users
-                 (user_id, role_id, full_name, email, password_hash, account_status, email_verified, email_verified_at)
-                 VALUES (?, 3, ?, ?, ?, 'pending', 1, UTC_TIMESTAMP())"
+                 (user_id, role_id, full_name, email, requested_address, password_hash, account_status, email_verified, email_verified_at)
+                 VALUES (?, 3, ?, ?, ?, ?, 'pending', 1, UTC_TIMESTAMP())"
             );
-            $insert->execute([$userId, $fullName, $email, password_hash($password, PASSWORD_DEFAULT)]);
+            $insert->execute([$userId, $fullName, $email, $requestedAddress, password_hash($password, PASSWORD_DEFAULT)]);
 
             $consume = $pdo->prepare('UPDATE email_verification_tokens SET consumed_at = UTC_TIMESTAMP() WHERE token_id = ?');
             $consume->execute([$tokenRecord['token_id']]);
 
             $pdo->commit();
             clear_rate_limit($pdo, 'register', $email);
-            audit_log($pdo, $userId, 'user.register', 'user', $userId, null, ['email' => $email]);
+            audit_log($pdo, $userId, 'user.register', 'user', $userId, null, [
+                'email' => $email,
+                'requestedAddress' => $requestedAddress,
+            ]);
             json_response(['success' => true, 'message' => 'Registration submitted for administrator approval.'], 201);
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) {

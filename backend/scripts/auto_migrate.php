@@ -12,10 +12,11 @@ require_once __DIR__ . '/../config/database.php';
 $requirements = [
     'schema_migrations' => ['migration_id', 'applied_at'],
     'roles' => ['role_id', 'role_name'],
-    'users' => ['user_id', 'role_id', 'full_name', 'email', 'password_hash', 'account_status', 'email_verified', 'email_verified_at', 'approved_by_user_id', 'approved_at', 'force_password_change', 'failed_login_attempts', 'locked_until', 'last_login_at', 'created_at', 'updated_at'],
+    'users' => ['user_id', 'role_id', 'full_name', 'email', 'requested_address', 'password_hash', 'account_status', 'email_verified', 'email_verified_at', 'approved_by_user_id', 'approved_at', 'force_password_change', 'failed_login_attempts', 'locked_until', 'last_login_at', 'created_at', 'updated_at'],
     'email_verification_tokens' => ['token_id', 'email', 'full_name', 'contact_number', 'purpose', 'code_hash', 'action_token_hash', 'attempt_count', 'expires_at', 'verified_at', 'consumed_at', 'created_at'],
     'password_reset_tokens' => ['reset_id', 'user_id', 'token_hash', 'expires_at', 'used_at', 'created_at'],
     'homeowners' => ['homeowner_id', 'user_id', 'owner_name', 'block_lot', 'street', 'contact_number', 'email', 'record_status', 'created_at', 'updated_at'],
+    'homeowner_user_links' => ['homeowner_id', 'user_id', 'linked_by_user_id', 'linked_at'],
     'household_occupants' => ['occupant_id', 'homeowner_id', 'full_name', 'relationship', 'created_at'],
     'homeowner_supporting_files' => ['file_id', 'homeowner_id', 'original_name', 'stored_name', 'mime_type', 'file_size', 'uploaded_by_user_id', 'uploaded_at'],
     'vehicles' => ['vehicle_id', 'homeowner_id', 'submitted_by_user_id', 'reviewed_by_user_id', 'vehicle_type', 'make_model', 'plate_number', 'color', 'approval_status', 'reviewed_at', 'created_at', 'updated_at'],
@@ -85,6 +86,10 @@ try {
         $migration->execute(['001_production_schema']);
         if ((int) $migration->fetchColumn() !== 1) {
             $errors[] = 'missing schema migration 001_production_schema';
+        }
+        $migration->execute(['004_household_account_links']);
+        if ((int) $migration->fetchColumn() !== 1) {
+            $errors[] = 'missing schema migration 004_household_account_links';
         }
     }
 

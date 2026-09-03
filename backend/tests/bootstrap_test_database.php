@@ -62,13 +62,22 @@ $insertHomeowner = $pdo->prepare(
 );
 $insertHomeowner->execute([
     '20000000-0000-4000-8000-000000000001',
-    '10000000-0000-4000-8000-000000000003',
+    null,
     'CI Resident', 'Block A Lot 1', 'Reliability Street', '09170000001', 'resident@example.test',
 ]);
 $insertHomeowner->execute([
     '20000000-0000-4000-8000-000000000002',
     null,
     'New CI Resident', 'Block A Lot 2', 'Reliability Street', '09170000002', 'newresident@example.test',
+]);
+
+$pdo->prepare(
+    'INSERT INTO homeowner_user_links (homeowner_id, user_id, linked_by_user_id)
+     VALUES (?, ?, ?)'
+)->execute([
+    '20000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000003',
+    '10000000-0000-4000-8000-000000000001',
 ]);
 
 $registrationToken = 'ci-registration-action-token';

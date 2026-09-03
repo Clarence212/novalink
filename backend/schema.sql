@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   role_id TINYINT UNSIGNED NOT NULL,
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(190) NOT NULL UNIQUE,
+  requested_address VARCHAR(190) NULL,
   password_hash VARCHAR(255) NOT NULL,
   account_status ENUM('pending', 'active', 'rejected', 'inactive') NOT NULL DEFAULT 'pending',
   email_verified TINYINT(1) NOT NULL DEFAULT 0,
@@ -79,6 +80,26 @@ CREATE TABLE IF NOT EXISTS homeowners (
   INDEX idx_homeowners_address (block_lot, street),
   INDEX idx_homeowners_email (email)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS homeowner_user_links (
+  homeowner_id CHAR(36) NOT NULL,
+  user_id CHAR(36) NOT NULL,
+  linked_by_user_id CHAR(36) NULL,
+  linked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (homeowner_id, user_id),
+  UNIQUE KEY uq_homeowner_user_links_user (user_id),
+  CONSTRAINT fk_homeowner_user_links_homeowner FOREIGN KEY (homeowner_id) REFERENCES homeowners(homeowner_id) ON DELETE CASCADE,
+  CONSTRAINT fk_homeowner_user_links_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_homeowner_user_links_actor FOREIGN KEY (linked_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+  INDEX idx_homeowner_user_links_homeowner (homeowner_id)
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO homeowner_user_links (homeowner_id, user_id, linked_by_user_id, linked_at)
+SELECT homeowner_id, user_id, NULL, created_at
+FROM homeowners
+WHERE user_id IS NOT NULL;
+
+UPDATE homeowners SET user_id = NULL WHERE user_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS household_occupants (
   occupant_id CHAR(36) PRIMARY KEY,
@@ -421,4 +442,8 @@ ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);
 
 INSERT INTO schema_migrations (migration_id)
 VALUES ('003_visitor_passes')
+ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);
+
+INSERT INTO schema_migrations (migration_id)
+VALUES ('004_household_account_links')
 ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);

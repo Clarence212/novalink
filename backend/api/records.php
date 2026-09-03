@@ -8,8 +8,10 @@ require_once __DIR__ . '/../services/EmailService.php';
 function homeowner_for_user(PDO $pdo, string $userId): array
 {
     $statement = $pdo->prepare(
-        "SELECT homeowner_id AS id, owner_name AS ownerName, email
-         FROM homeowners WHERE user_id = ? AND record_status = 'active' LIMIT 1"
+        "SELECT h.homeowner_id AS id, h.owner_name AS ownerName, h.email
+         FROM homeowner_user_links hul
+         JOIN homeowners h ON h.homeowner_id = hul.homeowner_id
+         WHERE hul.user_id = ? AND h.record_status = 'active' LIMIT 1"
     );
     $statement->execute([$userId]);
     $homeowner = $statement->fetch();
@@ -251,9 +253,6 @@ try {
             $role = require_choice($input, 'role', ['admin', 'security', 'resident']);
             $password = require_password($input['password'] ?? '');
             $homeownerId = optional_string($input, 'homeownerId', 36);
-            if ($role === 'resident' && !$homeownerId) {
-                json_response(['error' => 'Resident accounts must be linked to an unlinked homeowner record.'], 422);
-            }
             $roleMap = ['admin' => 1, 'security' => 2, 'resident' => 3];
             $exists = fetch_row($pdo, 'SELECT user_id FROM users WHERE email = ? LIMIT 1', [$email]);
             if ($exists) {
@@ -272,11 +271,13 @@ try {
                 $insert->execute([$id, $roleMap[$role], $fullName, $email, password_hash($password, PASSWORD_DEFAULT), $actor['id']]);
                 if ($role === 'resident' && $homeownerId) {
                     $link = $pdo->prepare(
-                        "UPDATE homeowners SET user_id = ? WHERE homeowner_id = ? AND user_id IS NULL AND record_status = 'active'"
+                        "INSERT INTO homeowner_user_links (homeowner_id, user_id, linked_by_user_id)
+                         SELECT homeowner_id, ?, ? FROM homeowners
+                         WHERE homeowner_id = ? AND record_status = 'active'"
                     );
-                    $link->execute([$id, $homeownerId]);
+                    $link->execute([$id, $actor['id'], $homeownerId]);
                     if ($link->rowCount() !== 1) {
-                        throw new RuntimeException('The selected homeowner record is unavailable or already linked.');
+                        throw new RuntimeException('The selected homeowner record is unavailable.');
                     }
                 }
                 $pdo->commit();
@@ -316,17 +317,6 @@ try {
                 if (!$before) {
                     $pdo->rollBack();
                     json_response(['error' => 'User not found.'], 404);
-                }
-                if ($status === 'active' && $before['role'] === 'resident') {
-                    $homeownerLink = fetch_row(
-                        $pdo,
-                        "SELECT homeowner_id FROM homeowners WHERE user_id = ? AND record_status = 'active' LIMIT 1",
-                        [$id]
-                    );
-                    if (!$homeownerLink) {
-                        $pdo->rollBack();
-                        json_response(['error' => 'Link this resident account to a homeowner record before approval.'], 422);
-                    }
                 }
                 if ($before['role'] === 'admin' && $before['status'] === 'active' && $status !== 'active') {
                     $activeAdmins = $pdo->query(
@@ -369,9 +359,6 @@ try {
             if ($id === $actor['id'] && $role !== 'admin') {
                 json_response(['error' => 'You cannot remove your own administrator role.'], 422);
             }
-            if ($role === 'resident' && !$homeownerId) {
-                json_response(['error' => 'Resident accounts must be linked to a homeowner record.'], 422);
-            }
             $roleMap = ['admin' => 1, 'security' => 2, 'resident' => 3];
             $pdo->beginTransaction();
             try {
@@ -381,7 +368,8 @@ try {
                             u.role_id AS roleId, r.role_name AS role, u.account_status AS status,
                             h.homeowner_id AS homeownerId
                      FROM users u JOIN roles r ON r.role_id = u.role_id
-                     LEFT JOIN homeowners h ON h.user_id = u.user_id AND h.record_status = 'active'
+                     LEFT JOIN homeowner_user_links hul ON hul.user_id = u.user_id
+                     LEFT JOIN homeowners h ON h.homeowner_id = hul.homeowner_id AND h.record_status = 'active'
                      WHERE u.user_id = ? LIMIT 1 FOR UPDATE",
                     [$id]
                 );
@@ -424,11 +412,15 @@ try {
                      WHERE user_id = ?'
                 );
                 $update->execute([$fullName, $email, $roleMap[$role], $emailChanged ? 1 : 0, $emailChanged ? 1 : 0, $id]);
-                $pdo->prepare('UPDATE homeowners SET user_id = NULL WHERE user_id = ?')->execute([$id]);
-                if ($role === 'resident') {
-                    $link = $pdo->prepare("UPDATE homeowners SET user_id = ? WHERE homeowner_id = ? AND user_id IS NULL AND record_status = 'active'");
-                    $link->execute([$id, $homeownerId]);
-                    if ($link->rowCount() !== 1) throw new RuntimeException('The selected homeowner record is unavailable or already linked.');
+                $pdo->prepare('DELETE FROM homeowner_user_links WHERE user_id = ?')->execute([$id]);
+                if ($role === 'resident' && $homeownerId) {
+                    $link = $pdo->prepare(
+                        "INSERT INTO homeowner_user_links (homeowner_id, user_id, linked_by_user_id)
+                         SELECT homeowner_id, ?, ? FROM homeowners
+                         WHERE homeowner_id = ? AND record_status = 'active'"
+                    );
+                    $link->execute([$id, $actor['id'], $homeownerId]);
+                    if ($link->rowCount() !== 1) throw new RuntimeException('The selected homeowner record is unavailable.');
                 }
                 $pdo->commit();
             } catch (Throwable $error) {

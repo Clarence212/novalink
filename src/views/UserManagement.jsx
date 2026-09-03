@@ -42,6 +42,37 @@ const isLocked = (user) => {
   return Boolean(lockedUntil && lockedUntil.getTime() > Date.now());
 };
 
+const normalizeAddress = (value = '') => value
+  .toLowerCase()
+  .replace(/\bblock\b/g, 'blk')
+  .replace(/\bstreet\b/g, 'st')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const homeownerAddress = (homeowner) => [homeowner.blockLot, homeowner.street].filter(Boolean).join(', ');
+
+const possibleHouseholdMatches = (user, homeowners) => {
+  const requested = normalizeAddress(user.requestedAddress);
+  if (!requested) return [];
+  const requestedTokens = new Set(requested.split(' ').filter(Boolean));
+  return homeowners
+    .map((homeowner) => {
+      const master = normalizeAddress(homeownerAddress(homeowner));
+      const blockLot = normalizeAddress(homeowner.blockLot);
+      const masterTokens = new Set(master.split(' ').filter(Boolean));
+      const sharedTokens = [...requestedTokens].filter((token) => masterTokens.has(token)).length;
+      const tokenRatio = sharedTokens / Math.max(1, Math.min(requestedTokens.size, masterTokens.size));
+      let score = 0;
+      if (requested === master) score = 100;
+      else if (requested.length >= 6 && master.length >= 6 && (requested.includes(master) || master.includes(requested))) score = 85;
+      else if (blockLot.length >= 4 && requested.includes(blockLot)) score = 70;
+      else if (sharedTokens >= 2 && tokenRatio >= 0.75) score = 55;
+      return { homeowner, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score);
+};
+
 const HISTORY_LABELS = {
   'auth.login': 'Signed in successfully',
   'auth.password_change': 'Changed password',
@@ -114,10 +145,10 @@ export const UserManagement = () => {
     }
   };
 
-  const handleEditOpen = (user) => {
+  const handleEditOpen = (user, suggestedHomeownerId = '') => {
     setEditingUser(user);
     setRoleChangeConfirmed(false);
-    setEditData({ fullName: user.fullName, email: user.email, role: user.role, homeownerId: user.homeownerId || '' });
+    setEditData({ fullName: user.fullName, email: user.email, role: user.role, homeownerId: user.homeownerId || suggestedHomeownerId });
   };
 
   const handleEditSubmit = async (event) => {
@@ -149,6 +180,7 @@ export const UserManagement = () => {
     const matchesSearch = !needle
       || (user.fullName || '').toLowerCase().includes(needle)
       || (user.email || '').toLowerCase().includes(needle)
+      || (user.requestedAddress || '').toLowerCase().includes(needle)
       || (user.role || '').toLowerCase().includes(needle);
     const matchesStatus = filterStatus === 'all'
       || user.status === filterStatus
@@ -211,15 +243,18 @@ export const UserManagement = () => {
             {filtered.map((user) => {
               const locked = isLocked(user);
               const rowBusy = busyAction.endsWith(user.id);
+              const householdMatches = user.role === 'resident' ? possibleHouseholdMatches(user, homeowners) : [];
+              const suggestedHousehold = householdMatches[0]?.homeowner || null;
               return (
                 <tr key={user.id} className="hover:bg-slate-700/30 transition align-top">
                   <td data-label="Account" className="px-5 py-4"><p className="font-medium text-slate-200">{user.fullName}</p><p className="text-slate-500 mt-1">{user.email}</p><div className="flex gap-1.5 mt-2">{roleBadge(user.role)}{statusBadge(user.status)}</div></td>
-                  <td data-label="Access" className="px-5 py-4 text-slate-400 space-y-1.5"><p>{user.homeownerId ? 'Linked homeowner' : user.role === 'resident' ? 'Unlinked resident' : 'Personnel account'}</p><p>Approved: {formatDateTime(user.approvedAt)}</p>{user.approvedByName && <p className="text-slate-500">By {user.approvedByName}</p>}</td>
+                  <td data-label="Access" className="px-5 py-4 text-slate-400 space-y-1.5"><p>{user.homeownerId ? 'Linked household' : user.role === 'resident' ? 'No household linked' : 'Personnel account'}</p>{user.requestedAddress && <p className="text-slate-500">Entered: {user.requestedAddress}</p>}{suggestedHousehold && !user.homeownerId && <div className="mt-2 max-w-xs border-l-2 border-amber-400 bg-amber-950/30 px-2.5 py-2 text-[10px] leading-4 text-amber-200"><p className="font-bold">Possible household match</p><p>{suggestedHousehold.ownerName} — {homeownerAddress(suggestedHousehold)}</p>{suggestedHousehold.linkedUserCount > 0 && <p className="mt-1 text-amber-300">Already shared by {suggestedHousehold.linkedUserCount} account{suggestedHousehold.linkedUserCount === 1 ? '' : 's'}.</p>}</div>}<p>Approved: {formatDateTime(user.approvedAt)}</p>{user.approvedByName && <p className="text-slate-500">By {user.approvedByName}</p>}</td>
                   <td data-label="Security" className="px-5 py-4 space-y-1.5"><p className={user.emailVerified ? 'text-emerald-400' : 'text-amber-400'}>{user.emailVerified ? 'Email verified' : 'Email verification required'}</p>{locked ? <p className="text-red-400">Locked until {formatDateTime(user.lockedUntil)}</p> : <p className="text-slate-500">Failed attempts: {user.failedLoginAttempts || 0}</p>}{user.forcePasswordChange && <p className="text-amber-400">Password change required</p>}</td>
                   <td data-label="Recent activity" className="px-5 py-4 text-slate-400 space-y-1.5"><p>Last login: {formatDateTime(user.lastLoginAt)}</p><p>Created: {formatDateTime(user.createdAt)}</p></td>
                   <td data-label="Actions" className="px-5 py-4">
                     <div className="flex gap-1.5 flex-wrap max-w-[360px]">
-                      {user.status === 'pending' && <>{user.role === 'resident' && !user.homeownerId ? <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user)} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> Link homeowner</ActionButton> : <ActionButton disabled={rowBusy} onClick={() => withBusy(`approve-${user.id}`, () => approveUser(user.id))} className="bg-emerald-600/70 hover:bg-emerald-600"><CheckCircle className="w-3 h-3" /> Approve</ActionButton>}<ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `reject-${user.id}`, title: `Reject ${user.fullName}?`, description: 'This account will not be able to sign in or complete registration.', impact: 'The decision is reversible by reactivating the account, and the reason is recorded in its audit history.', confirmLabel: 'Reject account', requireReason: true, operation: (reason) => rejectUser(user.id, reason) })} className="bg-red-600/70 hover:bg-red-600"><XCircle className="w-3 h-3" /> Reject</ActionButton></>}
+                      {user.status === 'pending' && <><ActionButton disabled={rowBusy} onClick={() => withBusy(`approve-${user.id}`, () => approveUser(user.id))} className="bg-emerald-600/70 hover:bg-emerald-600"><CheckCircle className="w-3 h-3" /> Approve</ActionButton><ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `reject-${user.id}`, title: `Reject ${user.fullName}?`, description: 'This account will not be able to sign in or complete registration.', impact: 'The decision is reversible by reactivating the account, and the reason is recorded in its audit history.', confirmLabel: 'Reject account', requireReason: true, operation: (reason) => rejectUser(user.id, reason) })} className="bg-red-600/70 hover:bg-red-600"><XCircle className="w-3 h-3" /> Reject</ActionButton></>}
+                      {user.role === 'resident' && <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user, suggestedHousehold?.id || '')} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> {user.homeownerId ? 'Change address link' : suggestedHousehold ? 'Review address match' : 'Link address'}</ActionButton>}
                       <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user)} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> Edit</ActionButton>
                       {user.status === 'active' && user.id !== currentUser?.id && <ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `deactivate-${user.id}`, title: `Deactivate ${user.fullName}?`, description: 'The account will lose access immediately.', impact: 'Existing records remain intact. An administrator can reactivate the account later.', confirmLabel: 'Deactivate account', requireReason: true, operation: (reason) => deactivateUser(user.id, reason) })} className="bg-slate-600 hover:bg-slate-500"><UserX className="w-3 h-3" /> Deactivate</ActionButton>}
                       {(user.status === 'inactive' || user.status === 'rejected') && <ActionButton disabled={rowBusy} onClick={() => withBusy(`reactivate-${user.id}`, () => reactivateUser(user.id))} className="bg-emerald-600/70 hover:bg-emerald-600"><UserCheck className="w-3 h-3" /> Reactivate</ActionButton>}
@@ -244,7 +279,7 @@ export const UserManagement = () => {
             <div><h3 className="text-lg font-bold text-slate-100 flex items-center gap-2"><UserPlus className="w-5 h-5 text-blue-400" /> Create System Account</h3><p className="text-xs text-slate-400 mt-1">The initial password must be shared privately and changed at first sign-in.</p></div>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <label className="block text-xs font-semibold text-slate-300">Account Role<select value={newUserData.role} onChange={(event) => setNewUserData({ ...newUserData, role: event.target.value, homeownerId: event.target.value === 'resident' ? newUserData.homeownerId : '' })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="admin">NHAI Administrator</option><option value="security">Security Personnel</option><option value="resident">Resident Homeowner</option></select></label>
-              {newUserData.role === 'resident' && <label className="block text-xs font-semibold text-slate-300">Homeowner Record<select required value={newUserData.homeownerId} onChange={(event) => setNewUserData({ ...newUserData, homeownerId: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="">Select an unlinked homeowner</option>{homeowners.filter((homeowner) => !homeowner.userId).map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeowner.blockLot}</option>)}</select></label>}
+              {newUserData.role === 'resident' && <label className="block text-xs font-semibold text-slate-300">Household Master Record <span className="font-normal text-slate-500">(optional)</span><select value={newUserData.homeownerId} onChange={(event) => setNewUserData({ ...newUserData, homeownerId: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="">No linked household</option>{homeowners.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeownerAddress(homeowner)} ({homeowner.linkedUserCount || 0} linked)</option>)}</select><span className="mt-1.5 block text-[10px] font-normal leading-4 text-slate-500">Several household members may share the same master record.</span></label>}
               <label className="block text-xs font-semibold text-slate-300">Full Name<input type="text" required value={newUserData.fullName} onChange={(event) => setNewUserData({ ...newUserData, fullName: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" /></label>
               <label className="block text-xs font-semibold text-slate-300">Email Address<input type="email" required value={newUserData.email} onChange={(event) => setNewUserData({ ...newUserData, email: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" /></label>
               <label className="block text-xs font-semibold text-slate-300">Initial Password<input type="password" required minLength={12} maxLength={128} pattern="(?=.*[A-Za-z])(?=.*\d).{12,128}" autoComplete="new-password" value={newUserData.password} onChange={(event) => setNewUserData({ ...newUserData, password: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" /></label>
@@ -261,7 +296,7 @@ export const UserManagement = () => {
             <div><h3 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Edit2 className="w-5 h-5 text-blue-400" /> Edit Account</h3><p className="text-xs text-slate-400 mt-1">Update {editingUser.fullName}</p></div>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <label className="block text-xs font-semibold text-slate-300">Role<select value={editData.role} onChange={(event) => { setEditData({ ...editData, role: event.target.value, homeownerId: event.target.value === 'resident' ? editData.homeownerId : '' }); setRoleChangeConfirmed(false); }} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="admin">NHAI Administrator</option><option value="security">Security Personnel</option><option value="resident">Resident Homeowner</option></select></label>
-              {editData.role === 'resident' && <label className="block text-xs font-semibold text-slate-300">Homeowner Record<select required value={editData.homeownerId} onChange={(event) => { setEditData({ ...editData, homeownerId: event.target.value }); setRoleChangeConfirmed(false); }} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="">Select a homeowner</option>{homeowners.filter((homeowner) => !homeowner.userId || homeowner.userId === editingUser.id).map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeowner.blockLot}</option>)}</select></label>}
+              {editData.role === 'resident' && <label className="block text-xs font-semibold text-slate-300">Household Master Record <span className="font-normal text-slate-500">(optional)</span><select value={editData.homeownerId} onChange={(event) => { setEditData({ ...editData, homeownerId: event.target.value }); setRoleChangeConfirmed(false); }} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500"><option value="">No linked household</option>{homeowners.map((homeowner) => <option key={homeowner.id} value={homeowner.id}>{homeowner.ownerName} — {homeownerAddress(homeowner)} ({homeowner.linkedUserCount || 0} linked)</option>)}</select><span className="mt-1.5 block text-[10px] font-normal leading-4 text-slate-500">Linking is optional. Multiple accounts can share this household record.</span></label>}
               <label className="block text-xs font-semibold text-slate-300">Full Name<input type="text" required value={editData.fullName} onChange={(event) => setEditData({ ...editData, fullName: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" /></label>
               <label className="block text-xs font-semibold text-slate-300">Email Address<input type="email" required value={editData.email} onChange={(event) => setEditData({ ...editData, email: event.target.value })} className="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-blue-500" /></label>
               {accessChanged && <label className="flex gap-3 p-3 rounded-xl border border-amber-700/60 bg-amber-950/30 text-xs text-amber-200"><input type="checkbox" checked={roleChangeConfirmed} onChange={(event) => setRoleChangeConfirmed(event.target.checked)} className="mt-0.5" /><span>I confirm this access change. {roleChanged && <>The role will change from <strong>{editingUser.role}</strong> to <strong>{editData.role}</strong>. </>}{homeownerChanged && <>The linked homeowner record will change. </>}Permissions and resident data access may change immediately.</span></label>}

@@ -71,7 +71,8 @@ function fetch_users(PDO $pdo): array
 {
     $rows = $pdo->query(
         "SELECT u.user_id AS id, r.role_name AS role, u.full_name AS fullName,
-                u.email, u.account_status AS status, u.email_verified AS emailVerified,
+                u.email, u.requested_address AS requestedAddress,
+                u.account_status AS status, u.email_verified AS emailVerified,
                 u.force_password_change AS forcePasswordChange, h.homeowner_id AS homeownerId,
                 u.failed_login_attempts AS failedLoginAttempts, u.locked_until AS lockedUntil,
                 u.last_login_at AS lastLoginAt, u.approved_at AS approvedAt,
@@ -79,7 +80,8 @@ function fetch_users(PDO $pdo): array
                 u.updated_at AS updatedAt
          FROM users u
          JOIN roles r ON r.role_id = u.role_id
-         LEFT JOIN homeowners h ON h.user_id = u.user_id AND h.record_status = 'active'
+         LEFT JOIN homeowner_user_links hul ON hul.user_id = u.user_id
+         LEFT JOIN homeowners h ON h.homeowner_id = hul.homeowner_id AND h.record_status = 'active'
          LEFT JOIN users approver ON approver.user_id = u.approved_by_user_id
          ORDER BY u.created_at DESC"
     )->fetchAll();
@@ -122,7 +124,10 @@ function fetch_users(PDO $pdo): array
 function fetch_homeowners(PDO $pdo, ?string $homeownerId = null): array
 {
     $sql =
-        "SELECT h.homeowner_id AS id, h.user_id AS userId, h.owner_name AS ownerName,
+        "SELECT h.homeowner_id AS id,
+                (SELECT MIN(hul.user_id) FROM homeowner_user_links hul WHERE hul.homeowner_id = h.homeowner_id) AS userId,
+                (SELECT COUNT(*) FROM homeowner_user_links hul WHERE hul.homeowner_id = h.homeowner_id) AS linkedUserCount,
+                h.owner_name AS ownerName,
                 h.block_lot AS blockLot, h.street, h.contact_number AS contactNumber,
                 h.email, h.record_status AS recordStatus,
                 (SELECT COUNT(*) FROM dues d WHERE d.homeowner_id = h.homeowner_id AND d.status = 'unpaid') AS unpaidMonths,
@@ -140,11 +145,20 @@ function fetch_homeowners(PDO $pdo, ?string $homeownerId = null): array
     $occupants = $pdo->prepare(
         'SELECT occupant_id AS id, full_name AS fullName, relationship FROM household_occupants WHERE homeowner_id = ? ORDER BY full_name'
     );
+    $linkedUsers = $pdo->prepare(
+        "SELECT u.user_id AS id, u.full_name AS fullName, u.email, u.account_status AS status
+         FROM homeowner_user_links hul
+         JOIN users u ON u.user_id = hul.user_id
+         WHERE hul.homeowner_id = ? ORDER BY u.full_name"
+    );
     foreach ($rows as &$row) {
         $row['unpaidMonths'] = (int) $row['unpaidMonths'];
         $row['restricted'] = (bool) $row['restricted'];
+        $row['linkedUserCount'] = (int) $row['linkedUserCount'];
         $occupants->execute([$row['id']]);
         $row['occupants'] = $occupants->fetchAll();
+        $linkedUsers->execute([$row['id']]);
+        $row['linkedUsers'] = $linkedUsers->fetchAll();
     }
     return $rows;
 }

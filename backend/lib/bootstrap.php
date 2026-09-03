@@ -272,7 +272,8 @@ function session_user(PDO $pdo): ?array
                 h.homeowner_id AS homeownerId
          FROM users u
          JOIN roles r ON r.role_id = u.role_id
-         LEFT JOIN homeowners h ON h.user_id = u.user_id AND h.record_status = 'active'
+         LEFT JOIN homeowner_user_links hul ON hul.user_id = u.user_id
+         LEFT JOIN homeowners h ON h.homeowner_id = hul.homeowner_id AND h.record_status = 'active'
          WHERE u.user_id = ? LIMIT 1"
     );
     $statement->execute([$userId]);

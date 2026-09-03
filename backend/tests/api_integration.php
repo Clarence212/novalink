@@ -159,15 +159,26 @@ $registration = $anonymous->postJson('/backend/api/auth.php', [
     'fullName' => 'New CI Resident',
     'password' => 'NewResidentReliability123!',
     'verificationToken' => 'ci-registration-action-token',
-    'blockLot' => 'Block A Lot 2',
+    'requestedAddress' => 'Block A Lot 1, Reliability Street',
 ]);
-expect_status($registration, 201, 'Verified homeowner registration must succeed');
+expect_status($registration, 201, 'Verified resident registration must succeed without a required household link');
 $adminState = $admin->get('/backend/api/state.php');
 $newUser = find_by($adminState['json']['state']['users'] ?? [], 'email', 'newresident@example.test');
 expect_true($newUser !== null && $newUser['status'] === 'pending', 'Registration must create a pending user');
+expect_true(($newUser['requestedAddress'] ?? '') === 'Block A Lot 1, Reliability Street', 'Registration must retain the address for administrator review');
+$sharedHomeowner = find_by($adminState['json']['state']['homeowners'] ?? [], 'id', '20000000-0000-4000-8000-000000000001');
+expect_true($sharedHomeowner !== null && ($sharedHomeowner['linkedUserCount'] ?? 0) === 1, 'Existing household must start with one linked account');
 expect_status($admin->postJson('/backend/api/records.php', [
     'resource' => 'users', 'action' => 'status', 'id' => $newUser['id'], 'status' => 'active',
-]), 200, 'Administrator must approve a pending registration');
+]), 200, 'Administrator must be able to approve an account without linking a household');
+expect_status($admin->postJson('/backend/api/records.php', [
+    'resource' => 'users', 'action' => 'update', 'id' => $newUser['id'],
+    'fullName' => $newUser['fullName'], 'email' => $newUser['email'], 'role' => 'resident',
+    'homeownerId' => $sharedHomeowner['id'], 'confirmAccessChange' => true,
+]), 200, 'Administrator must be able to link another account to an occupied household record');
+$adminState = $admin->get('/backend/api/state.php');
+$sharedHomeowner = find_by($adminState['json']['state']['homeowners'] ?? [], 'id', '20000000-0000-4000-8000-000000000001');
+expect_true(($sharedHomeowner['linkedUserCount'] ?? 0) === 2, 'Household master record must support multiple linked accounts');
 $newResident = new ApiClient($baseUrl);
 expect_status($newResident->login('newresident@example.test', 'NewResidentReliability123!'), 200, 'Approved resident login must work');
 
