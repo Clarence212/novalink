@@ -38,25 +38,31 @@ const formatDateTime = (value) => {
 };
 
 const isLocked = (user) => {
+  if (!user || !user.lockedUntil) return false;
   const lockedUntil = parseUtc(user.lockedUntil);
   return Boolean(lockedUntil && lockedUntil.getTime() > Date.now());
 };
 
-const normalizeAddress = (value = '') => value
+const normalizeAddress = (value = '') => String(value || '')
   .toLowerCase()
   .replace(/\bblock\b/g, 'blk')
   .replace(/\bstreet\b/g, 'st')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 
-const homeownerAddress = (homeowner) => [homeowner.blockLot, homeowner.street].filter(Boolean).join(', ');
+const homeownerAddress = (homeowner) => {
+  if (!homeowner) return '';
+  return [homeowner.blockLot, homeowner.street].filter(Boolean).join(', ');
+};
 
 const possibleHouseholdMatches = (user, homeowners) => {
+  if (!user || !user.requestedAddress) return [];
   const requested = normalizeAddress(user.requestedAddress);
   if (!requested) return [];
   const requestedTokens = new Set(requested.split(' ').filter(Boolean));
-  return homeowners
+  return (homeowners || [])
     .map((homeowner) => {
+      if (!homeowner) return { homeowner: null, score: 0 };
       const master = normalizeAddress(homeownerAddress(homeowner));
       const blockLot = normalizeAddress(homeowner.blockLot);
       const masterTokens = new Set(master.split(' ').filter(Boolean));
@@ -69,7 +75,7 @@ const possibleHouseholdMatches = (user, homeowners) => {
       else if (sharedTokens >= 2 && tokenRatio >= 0.75) score = 55;
       return { homeowner, score };
     })
-    .filter(({ score }) => score > 0)
+    .filter(({ homeowner, score }) => homeowner && score > 0)
     .sort((left, right) => right.score - left.score);
 };
 
@@ -89,6 +95,7 @@ const HISTORY_LABELS = {
 };
 
 const historyDetail = (entry) => {
+  if (!entry) return '';
   if (entry.action === 'user.status' && entry.after?.status) return `New status: ${entry.after.status}`;
   if (entry.action === 'user.update' && entry.after?.role) return `Role: ${entry.after.role}`;
   if (entry.action === 'auth.login' && entry.ipAddress) return `IP: ${entry.ipAddress}`;
@@ -107,10 +114,13 @@ const ActionButton = ({ children, className = '', ...props }) => (
 
 export const UserManagement = () => {
   const {
-    users, homeowners, currentUser, createUserAccount, approveUser, rejectUser,
+    users = [], homeowners = [], currentUser = null, createUserAccount, approveUser, rejectUser,
     deactivateUser, reactivateUser, editUser, unlockUser, forceUserPasswordReset,
     resendUserVerification,
   } = useApp();
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeHomeowners = Array.isArray(homeowners) ? homeowners : [];
+
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -146,13 +156,15 @@ export const UserManagement = () => {
   };
 
   const handleEditOpen = (user, suggestedHomeownerId = '') => {
+    if (!user) return;
     setEditingUser(user);
     setRoleChangeConfirmed(false);
-    setEditData({ fullName: user.fullName, email: user.email, role: user.role, homeownerId: user.homeownerId || suggestedHomeownerId });
+    setEditData({ fullName: user.fullName || '', email: user.email || '', role: user.role || 'resident', homeownerId: user.homeownerId || suggestedHomeownerId });
   };
 
   const handleEditSubmit = async (event) => {
     event.preventDefault();
+    if (!editingUser) return;
     const changed = editData.role !== editingUser.role;
     const linkChanged = editData.role === 'resident' && (editData.homeownerId || '') !== (editingUser.homeownerId || '');
     if ((changed || linkChanged) && !roleChangeConfirmed) return;
@@ -175,7 +187,8 @@ export const UserManagement = () => {
     if (result?.success) setConfirmation(null);
   };
 
-  const filtered = useMemo(() => users.filter((user) => {
+  const filtered = useMemo(() => safeUsers.filter((user) => {
+    if (!user) return false;
     const needle = search.trim().toLowerCase();
     const matchesSearch = !needle
       || (user.fullName || '').toLowerCase().includes(needle)
@@ -186,11 +199,11 @@ export const UserManagement = () => {
       || user.status === filterStatus
       || (filterStatus === 'locked' && isLocked(user));
     return matchesSearch && matchesStatus;
-  }), [filterStatus, search, users]);
+  }), [filterStatus, search, safeUsers]);
 
-  const pendingCount = users.filter((user) => user.status === 'pending').length;
-  const lockedCount = users.filter(isLocked).length;
-  const unverifiedCount = users.filter((user) => !user.emailVerified).length;
+  const pendingCount = safeUsers.filter((user) => user?.status === 'pending').length;
+  const lockedCount = safeUsers.filter(isLocked).length;
+  const unverifiedCount = safeUsers.filter((user) => !user?.emailVerified).length;
   const roleChanged = Boolean(editingUser && editData.role !== editingUser.role);
   const homeownerChanged = Boolean(
     editingUser
@@ -242,8 +255,8 @@ export const UserManagement = () => {
           <tbody className="divide-y divide-slate-700/50">
             {filtered.map((user) => {
               const locked = isLocked(user);
-              const rowBusy = busyAction.endsWith(user.id);
-              const householdMatches = user.role === 'resident' ? possibleHouseholdMatches(user, homeowners) : [];
+              const rowBusy = Boolean(busyAction && user?.id && busyAction.endsWith(String(user.id)));
+              const householdMatches = user.role === 'resident' ? possibleHouseholdMatches(user, safeHomeowners) : [];
               const suggestedHousehold = householdMatches[0]?.homeowner || null;
               return (
                 <tr key={user.id} className="hover:bg-slate-700/30 transition align-top">
