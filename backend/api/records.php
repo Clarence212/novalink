@@ -326,7 +326,6 @@ try {
                          WHERE hul.user_id = ? LIMIT 1",
                         [$id]
                     );
-                    // linking is optional — admin can approve without it
                 }
                 if ($before['role'] === 'admin' && $before['status'] === 'active' && $status !== 'active') {
                     $activeAdmins = $pdo->query(
