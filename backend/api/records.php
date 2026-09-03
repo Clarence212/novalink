@@ -321,13 +321,12 @@ try {
                 if ($status === 'active' && $before['role'] === 'resident') {
                     $homeownerLink = fetch_row(
                         $pdo,
-                        "SELECT homeowner_id FROM homeowners WHERE user_id = ? AND record_status = 'active' LIMIT 1",
+                        "SELECT hul.homeowner_id FROM homeowner_user_links hul
+                         JOIN homeowners h ON h.homeowner_id = hul.homeowner_id AND h.record_status = 'active'
+                         WHERE hul.user_id = ? LIMIT 1",
                         [$id]
                     );
-                    if (!$homeownerLink) {
-                        $pdo->rollBack();
-                        json_response(['error' => 'Link this resident account to a homeowner record before approval.'], 422);
-                    }
+                    // linking is optional — admin can approve without it
                 }
                 if ($before['role'] === 'admin' && $before['status'] === 'active' && $status !== 'active') {
                     $activeAdmins = $pdo->query(
