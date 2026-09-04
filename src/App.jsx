@@ -25,6 +25,7 @@ import { GuestModeView } from './views/GuestModeView';
 import { LoadingPanel } from './components/ui/Primitives';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalPage } from './views/LegalPage';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 const AppContent = () => {
   const { currentUser, isGuestMode, setIsGuestMode, isBootstrapping, logout, changePassword } = useApp();
@@ -167,7 +168,9 @@ const AppContent = () => {
         {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/70 lg:hidden" />}
         <Sidebar activeView={activeView} setActiveView={handleSetView} isOpen={sidebarOpen} />
         <main id="main-content" tabIndex="-1" className="flex-1 overflow-y-auto bg-slate-950 focus:outline-none">
-          {renderView()}
+          <AppErrorBoundary resetKey={`${currentUser?.id || 'guest'}:${activeView}`} onReturnToDashboard={() => setActiveView('dashboard')}>
+            {renderView()}
+          </AppErrorBoundary>
         </main>
       </div>
     </div>

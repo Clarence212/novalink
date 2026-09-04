@@ -5,8 +5,10 @@ import {
   Check,
   CheckCircle2,
   Circle,
+  CircleAlert,
   Eye,
   EyeOff,
+  LifeBuoy,
   Loader2,
   Lock,
   Mail,
@@ -35,6 +37,9 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
 
   const [regData, setRegData] = useState(EMPTY_REGISTRATION);
@@ -92,18 +97,28 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
   const handleSignIn = async (e) => {
     e.preventDefault();
-    const result = await login(email, password, rememberMe);
-    if (!result.success) {
-      if (result.code === 'EMAIL_VERIFICATION_REQUIRED') {
-        setAccountVerificationEmail(email.trim());
-        setAccountVerificationOtp('');
-        setActiveModal('verify-account');
+    setLoginError('');
+    setIsSigningIn(true);
+    try {
+      const result = await login(email, password, rememberMe);
+      if (!result.success) {
+        setLoginError(result.message || 'Sign-in failed. Check your details and try again.');
+        if (result.code === 'EMAIL_VERIFICATION_REQUIRED') {
+          setAccountVerificationEmail(email.trim());
+          setAccountVerificationOtp('');
+          setActiveModal('verify-account');
+        }
+        return;
       }
-      showToast(result.message, 'warning');
-      return;
+      showToast('Signed in successfully!', 'success');
+      if (onLoginSuccess) onLoginSuccess();
+    } finally {
+      setIsSigningIn(false);
     }
-    showToast('Signed in successfully!', 'success');
-    if (onLoginSuccess) onLoginSuccess();
+  };
+
+  const updateCapsLockState = (event) => {
+    setCapsLockOn(Boolean(event.getModifierState?.('CapsLock')));
   };
 
   const handleGuestAccess = () => {
@@ -352,7 +367,9 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     autoComplete="email"
                     placeholder="Email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setLoginError(''); }}
+                    aria-invalid={Boolean(loginError)}
+                    aria-describedby={loginError ? 'login-error' : undefined}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                 </div>
@@ -368,7 +385,12 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     autoComplete="current-password"
                     placeholder="Password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setLoginError(''); }}
+                    onKeyDown={updateCapsLockState}
+                    onKeyUp={updateCapsLockState}
+                    onBlur={() => setCapsLockOn(false)}
+                    aria-invalid={Boolean(loginError)}
+                    aria-describedby={[capsLockOn ? 'caps-lock-warning' : '', loginError ? 'login-error' : ''].filter(Boolean).join(' ') || undefined}
                     className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                   <button
@@ -381,9 +403,11 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {capsLockOn && <p id="caps-lock-warning" className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700" role="status"><CircleAlert className="h-3.5 w-3.5" /> Caps Lock is on</p>}
               </div>
 
-              { }
+              {loginError && <div id="login-error" className="flex items-start gap-2 border-l-2 border-red-500 bg-red-50 px-3 py-2.5 text-xs font-medium leading-5 text-red-800" role="alert"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><span>{loginError}</span></div>}
+
               <div className="flex items-center justify-between gap-3 text-xs pt-1">
                 <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-600">
                   <span className="relative h-4 w-4 shrink-0">
@@ -409,9 +433,10 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               { }
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition transform active:scale-[0.99] mt-2"
+                disabled={isSigningIn}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition transform active:scale-[0.99] mt-2"
               >
-                Sign In
+                {isSigningIn ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Signing in…</span> : 'Sign In'}
               </button>
             </form>
 
@@ -440,6 +465,11 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               <UserCheck className="w-4 h-4 text-blue-600" />
               <span>Continue as Guest (Facility Reservation Only)</span>
             </button>
+
+            <p className="mt-5 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
+              <LifeBuoy className="h-3.5 w-3.5" />
+              Need help? <a href="mailto:mail@novalinkhub.tech?subject=NovaLink%20account%20support" className="font-semibold text-blue-600 hover:text-blue-700 hover:underline">Contact the NHAI office</a>
+            </p>
           </div>
         </div>
 
