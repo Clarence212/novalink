@@ -32,6 +32,10 @@ const EMPTY_STATE = {
   stickerRenewals: [],
   facilities: [],
   emailLog: [],
+  notifications: [],
+  notificationPreferences: {},
+  notificationPreferencesReady: false,
+  accountLifecycleReady: false,
   paymentQRCode: {
     provider: 'GCash',
     gcashName: 'Not configured',
@@ -52,6 +56,9 @@ export const AppProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isGuestMode, setGuestMode] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState('');
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [toast, setToast] = useState(null);
@@ -90,20 +97,36 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     let active = true;
     const initialize = async () => {
+      setIsBootstrapping(true);
+      setBootstrapError('');
       try {
         const session = await apiSession();
         if (!active) return;
         setCurrentUser(session.user || null);
         if (session.user && !session.user.forcePasswordChange) {
-          applyState(await apiFetchState());
+          setIsLoadingData(true);
+          try {
+            const nextState = await apiFetchState();
+            if (active) applyState(nextState);
+          } finally {
+            if (active) setIsLoadingData(false);
+          }
         } else {
           const facilities = await apiFetchPublicFacilities();
-          applyState({ ...EMPTY_STATE, facilities });
+          if (active) applyState({ ...EMPTY_STATE, facilities });
         }
       } catch (error) {
-        if (active) showToast(error.message || 'NovaLink could not connect to the server.', 'warning');
+        if (active) {
+          setCurrentUser(null);
+          setGuestMode(false);
+          applyState(EMPTY_STATE);
+          setBootstrapError(error.message || 'NovaLink could not connect to the server.');
+        }
       } finally {
-        if (active) setIsBootstrapping(false);
+        if (active) {
+          setIsBootstrapping(false);
+          setIsLoadingData(false);
+        }
       }
     };
     initialize();
@@ -111,7 +134,11 @@ export const AppProvider = ({ children }) => {
       active = false;
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
-  }, [applyState, showToast]);
+  }, [applyState, bootstrapAttempt]);
+
+  const retryBootstrap = useCallback(() => {
+    setBootstrapAttempt((attempt) => attempt + 1);
+  }, []);
 
   const setIsGuestMode = useCallback(async (enabled) => {
     setGuestMode(Boolean(enabled));
@@ -133,7 +160,19 @@ export const AppProvider = ({ children }) => {
       if (result.user.forcePasswordChange) {
         applyState(EMPTY_STATE);
       } else {
-        applyState(await apiFetchState());
+        setIsLoadingData(true);
+        try {
+          applyState(await apiFetchState());
+        } catch (error) {
+          if (error.status === 401) {
+            setCurrentUser(null);
+            applyState(EMPTY_STATE);
+            throw error;
+          }
+          showToast('You are signed in, but current dashboard data could not be loaded. Use Refresh to try again.', 'warning');
+        } finally {
+          setIsLoadingData(false);
+        }
       }
       return { success: true };
     } catch (error) {
@@ -141,9 +180,10 @@ export const AppProvider = ({ children }) => {
         success: false,
         message: error.message || 'Sign-in failed.',
         code: error.payload?.code || '',
+        retryable: error.status === 0 || error.status >= 500,
       };
     }
-  }, [applyState]);
+  }, [applyState, showToast]);
 
   const logout = useCallback(async () => {
     try {
@@ -217,6 +257,8 @@ export const AppProvider = ({ children }) => {
   const rejectUser = (id, reason) => runAction('users', 'status', { id, status: 'rejected', reason }, 'Account rejected.');
   const deactivateUser = (id, reason) => runAction('users', 'status', { id, status: 'inactive', reason }, 'Account deactivated.');
   const reactivateUser = (id) => runAction('users', 'status', { id, status: 'active' }, 'Account reactivated.');
+  const archiveUser = (id, reason) => runAction('users', 'status', { id, status: 'archived', reason }, 'Account archived.');
+  const anonymizeUser = (id, confirmEmail) => runAction('users', 'anonymize', { id, confirmEmail }, 'Archived account data anonymized.');
   const editUser = (id, updates) => runAction('users', 'update', { id, ...updates }, 'User account updated.');
   const unlockUser = (id) => runAction('users', 'unlock', { id }, 'Account lock and failed sign-in counter cleared.');
   const forceUserPasswordReset = (id) => runAction(
@@ -231,6 +273,15 @@ export const AppProvider = ({ children }) => {
     { id },
     'A new account-verification code was emailed.',
   );
+  const saveNotificationPreference = (category, emailEnabled, inAppEnabled) => runAction(
+    'notification-preferences',
+    'update',
+    { category, emailEnabled, inAppEnabled },
+    'Notification preference saved.',
+  );
+  const markNotificationRead = (id) => runAction('notifications', 'mark-read', { id }, null);
+  const markAllNotificationsRead = () => runAction('notifications', 'mark-all-read', {}, 'All notifications marked as read.');
+  const retryEmailDelivery = (id) => runAction('notifications', 'retry', { id }, 'Email delivery retried.');
 
   const addVisitorLog = (payload) => runAction('visitors', 'create', payload, 'Visitor entry saved.');
   const updateVisitorExit = (id) => runAction('visitors', 'exit', { id }, 'Visitor exit recorded.');
@@ -308,6 +359,9 @@ export const AppProvider = ({ children }) => {
     isGuestMode,
     setIsGuestMode,
     isBootstrapping,
+    isLoadingData,
+    bootstrapError,
+    retryBootstrap,
     isRefreshing,
     lastUpdatedAt,
     toast,
@@ -323,10 +377,16 @@ export const AppProvider = ({ children }) => {
     rejectUser,
     deactivateUser,
     reactivateUser,
+    archiveUser,
+    anonymizeUser,
     editUser,
     unlockUser,
     forceUserPasswordReset,
     resendUserVerification,
+    saveNotificationPreference,
+    markNotificationRead,
+    markAllNotificationsRead,
+    retryEmailDelivery,
     addVisitorLog,
     updateVisitorExit,
     createVisitorPass,

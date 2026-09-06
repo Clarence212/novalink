@@ -4,7 +4,7 @@ import { LoginView } from './views/LoginView';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
-import { EmailLogModal } from './components/EmailLogModal';
+import { NotificationCenter } from './components/NotificationCenter';
 
 
 import { AdminDashboard } from './views/AdminDashboard';
@@ -22,26 +22,29 @@ import { ResidentConcerns } from './views/ResidentConcerns';
 import { VehicleManagement } from './views/VehicleManagement';
 import { StickerRenewals } from './views/StickerRenewals';
 import { GuestModeView } from './views/GuestModeView';
-import { LoadingPanel } from './components/ui/Primitives';
+import { DashboardSkeleton } from './components/ui/Primitives';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalPage } from './views/LegalPage';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { NotificationPreferences } from './views/NotificationPreferences';
+import { EmailDeliveryDashboard } from './views/EmailDeliveryDashboard';
 
 const AppContent = () => {
-  const { currentUser, isGuestMode, setIsGuestMode, isBootstrapping, logout, changePassword } = useApp();
+  const {
+    currentUser,
+    isGuestMode,
+    setIsGuestMode,
+    isBootstrapping,
+    isLoadingData,
+    bootstrapError,
+    retryBootstrap,
+    logout,
+    changePassword,
+  } = useApp();
   const [activeView, setActiveView] = useState('dashboard');
-  const [showEmailLog, setShowEmailLog] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
-
-  
-  if (isBootstrapping) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
-        <LoadingPanel label="Connecting securely to NovaLink…" />
-      </div>
-    );
-  }
 
   if (!currentUser && !isGuestMode) {
     return (
@@ -50,6 +53,9 @@ const AppContent = () => {
         <LoginView
           onLoginSuccess={() => setActiveView('dashboard')}
           onGuestMode={() => { setIsGuestMode(true); setActiveView('guest'); }}
+          sessionChecking={isBootstrapping}
+          connectionError={bootstrapError}
+          onRetryConnection={retryBootstrap}
         />
       </>
     );
@@ -91,17 +97,12 @@ const AppContent = () => {
 
   
   const allowedViews = {
-    admin: new Set(['dashboard', 'homeowners', 'user-management', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'reports', 'concerns', 'vehicles', 'stickers', 'email-log']),
-    security: new Set(['dashboard', 'visitor-management', 'announcements']),
-    resident: new Set(['dashboard', 'announcements', 'visitor-management', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers']),
+    admin: new Set(['dashboard', 'homeowners', 'user-management', 'visitor-management', 'announcements', 'reservations', 'dues', 'dues-charts', 'reports', 'concerns', 'vehicles', 'stickers', 'email-log', 'notification-preferences']),
+    security: new Set(['dashboard', 'visitor-management', 'announcements', 'notification-preferences']),
+    resident: new Set(['dashboard', 'announcements', 'visitor-management', 'reservations', 'dues', 'concerns', 'vehicles', 'stickers', 'notification-preferences']),
   };
 
   const handleSetView = (view) => {
-    if (view === 'email-log' && currentUser?.role === 'admin') {
-      setShowEmailLog(true);
-      setSidebarOpen(false);
-      return;
-    }
     if (allowedViews[currentUser?.role]?.has(view)) {
       setActiveView(view);
       setSidebarOpen(false);
@@ -117,6 +118,7 @@ const AppContent = () => {
   
   const renderView = () => {
     if (isGuestMode) return <GuestModeView />;
+    if (isLoadingData) return <DashboardSkeleton />;
 
     const role = currentUser?.role;
     if (!allowedViews[role]?.has(activeView)) {
@@ -146,7 +148,8 @@ const AppContent = () => {
       'concerns': <ResidentConcerns />,
       'vehicles': <VehicleManagement />,
       'stickers': <StickerRenewals />,
-      'email-log': null, 
+      'email-log': <EmailDeliveryDashboard />,
+      'notification-preferences': <NotificationPreferences />,
     };
 
     return viewMap[activeView] || (role === 'admin' ? <AdminDashboard setActiveView={handleSetView} /> : <ResidentDashboard setActiveView={handleSetView} />);
@@ -156,11 +159,11 @@ const AppContent = () => {
     <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100">
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <Toast />
-      {showEmailLog && <EmailLogModal onClose={() => setShowEmailLog(false)} />}
+      {showNotifications && <NotificationCenter onClose={() => setShowNotifications(false)} onOpenPreferences={() => { setShowNotifications(false); handleSetView('notification-preferences'); }} />}
 
       <Navbar
         onSignOut={handleSignOut}
-        onOpenEmailLog={() => setShowEmailLog(true)}
+        onOpenNotifications={() => setShowNotifications(true)}
         toggleSidebar={() => setSidebarOpen(open => !open)}
       />
 

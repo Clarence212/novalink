@@ -27,13 +27,22 @@ async function request(path, { method = 'GET', body, formData } = {}) {
   if (csrfToken && method !== 'GET') headers['X-CSRF-Token'] = csrfToken;
   if (!formData && body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const response = await fetch(`${API_BASE_URL}/${path}`, {
-    method,
-    credentials: 'same-origin',
-    headers,
-    body: formData || (body === undefined ? undefined : JSON.stringify(body)),
-  });
-  return parseResponse(response);
+  try {
+    const response = await fetch(`${API_BASE_URL}/${path}`, {
+      method,
+      credentials: 'same-origin',
+      headers,
+      body: formData || (body === undefined ? undefined : JSON.stringify(body)),
+    });
+    return await parseResponse(response);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      'NovaLink could not reach the server. Check your connection and try again.',
+      0,
+      { code: 'CONNECTION_ERROR' },
+    );
+  }
 }
 
 export function setCsrfToken(value) {

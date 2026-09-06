@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BarChart3, Bell, Calendar, Car, ChevronDown, ClipboardList, CreditCard,
-  Eye, Home, LayoutDashboard, Lock, MessageSquare, Shield, Users,
+  Eye, Home, LayoutDashboard, Lock, Mail, MessageSquare, Settings2, Shield, Users,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -26,7 +26,8 @@ const adminGroups = [
   { id: 'communication', label: 'Communication', items: [
     { id: 'announcements', label: 'Announcements', icon: Bell },
     { id: 'concerns', label: 'Concern Management', icon: MessageSquare },
-    { id: 'email-log', label: 'Email Delivery Log', icon: Bell },
+    { id: 'email-log', label: 'Email Delivery', icon: Mail },
+    { id: 'notification-preferences', label: 'Notification Preferences', icon: Settings2 },
   ] },
 ];
 
@@ -34,6 +35,7 @@ const guardNav = [
   { id: 'dashboard', label: 'Security Overview', icon: LayoutDashboard },
   { id: 'visitor-management', label: 'Visitor Gate', icon: Shield },
   { id: 'announcements', label: 'Announcements', icon: Bell },
+  { id: 'notification-preferences', label: 'Notification Preferences', icon: Settings2 },
 ];
 
 const restrictedModules = ['reservations', 'stickers', 'concerns'];
@@ -46,6 +48,7 @@ const residentNav = [
   { id: 'concerns', label: 'My Concerns', icon: MessageSquare },
   { id: 'vehicles', label: 'My Vehicles', icon: Car },
   { id: 'stickers', label: 'Sticker Renewals', icon: ClipboardList },
+  { id: 'notification-preferences', label: 'Notification Preferences', icon: Settings2 },
 ];
 
 const NavButton = ({ item, activeView, setActiveView, locked }) => {

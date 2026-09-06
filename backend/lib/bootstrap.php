@@ -6,6 +6,35 @@ require_once __DIR__ . '/../config/database.php';
 const NOVALINK_MAX_JSON_BYTES = 1_048_576;
 const NOVALINK_REMEMBER_SESSION_SECONDS = 2_592_000;
 
+function database_has_columns(PDO $pdo, string $table, array $columns): bool
+{
+    static $cache = [];
+    sort($columns);
+    $key = $table . ':' . implode(',', $columns);
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    $placeholders = implode(',', array_fill(0, count($columns), '?'));
+    $statement = $pdo->prepare(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+           AND COLUMN_NAME IN ({$placeholders})"
+    );
+    $statement->execute(array_merge([$table], $columns));
+    $cache[$key] = (int) $statement->fetchColumn() === count($columns);
+    return $cache[$key];
+}
+
+function database_column_type(PDO $pdo, string $table, string $column): string
+{
+    $statement = $pdo->prepare(
+        'SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1'
+    );
+    $statement->execute([$table, $column]);
+    return (string) ($statement->fetchColumn() ?: '');
+}
+
 function request_id(): string
 {
     static $requestId = null;

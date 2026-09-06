@@ -298,7 +298,10 @@ try {
 
         if ($action === 'status') {
             $id = required_string($input, 'id', 36, 'User ID');
-            $status = require_choice($input, 'status', ['active', 'rejected', 'inactive']);
+            $status = require_choice($input, 'status', ['active', 'rejected', 'inactive', 'archived']);
+            if ($status === 'archived' && !account_lifecycle_available($pdo)) {
+                json_response(['error' => 'Account archival requires database migration 005.'], 409);
+            }
             $reason = $status === 'active' ? null : required_string($input, 'reason', 500, 'Reason');
             if ($id === $actor['id'] && $status !== 'active') {
                 json_response(['error' => 'You cannot deactivate your own active session.'], 422);
@@ -337,10 +340,30 @@ try {
                         json_response(['error' => 'The last active administrator cannot be deactivated or rejected.'], 422);
                     }
                 }
-                $update = $pdo->prepare(
-                    'UPDATE users SET account_status = ?, approved_by_user_id = ?, approved_at = CASE WHEN ? = \'active\' THEN UTC_TIMESTAMP() ELSE approved_at END WHERE user_id = ?'
-                );
-                $update->execute([$status, $actor['id'], $status, $id]);
+                if (account_lifecycle_available($pdo)) {
+                    $update = $pdo->prepare(
+                        "UPDATE users
+                         SET account_status = ?, approved_by_user_id = ?,
+                             approved_at = CASE WHEN ? = 'active' THEN UTC_TIMESTAMP() ELSE approved_at END,
+                             archived_at = CASE
+                                 WHEN ? = 'archived' THEN UTC_TIMESTAMP()
+                                 WHEN ? = 'active' THEN NULL
+                                 ELSE archived_at
+                             END
+                         WHERE user_id = ?"
+                    );
+                    $update->execute([$status, $actor['id'], $status, $status, $status, $id]);
+                } else {
+                    $update = $pdo->prepare(
+                        'UPDATE users SET account_status = ?, approved_by_user_id = ?, approved_at = CASE WHEN ? = \'active\' THEN UTC_TIMESTAMP() ELSE approved_at END WHERE user_id = ?'
+                    );
+                    $update->execute([$status, $actor['id'], $status, $id]);
+                }
+                if ($status === 'archived') {
+                    $pdo->prepare('DELETE FROM homeowner_user_links WHERE user_id = ?')->execute([$id]);
+                    $pdo->prepare('DELETE FROM password_reset_tokens WHERE user_id = ?')->execute([$id]);
+                    $pdo->prepare('DELETE FROM email_verification_tokens WHERE email = ?')->execute([$before['email']]);
+                }
                 $pdo->commit();
             } catch (Throwable $error) {
                 if ($pdo->inTransaction()) {
@@ -355,6 +378,79 @@ try {
                 'account_status'
             );
             json_response(['success' => true, 'emailDelivered' => $mailSent]);
+        }
+
+        if ($action === 'anonymize') {
+            if (!account_lifecycle_available($pdo)) {
+                json_response(['error' => 'Account anonymization requires database migration 005.'], 409);
+            }
+            $id = required_string($input, 'id', 36, 'User ID');
+            $confirmEmail = normalize_email($input['confirmEmail'] ?? '');
+            if ($id === $actor['id']) {
+                json_response(['error' => 'You cannot anonymize your own administrator account.'], 422);
+            }
+            $pdo->beginTransaction();
+            try {
+                $before = fetch_row(
+                    $pdo,
+                    'SELECT user_id AS id, email, account_status AS status, anonymized_at AS anonymizedAt
+                     FROM users WHERE user_id = ? LIMIT 1 FOR UPDATE',
+                    [$id]
+                );
+                if (!$before) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'User not found.'], 404);
+                }
+                if ($before['status'] !== 'archived') {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Archive the account before anonymizing it.'], 422);
+                }
+                if ($before['anonymizedAt']) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'This account has already been anonymized.'], 409);
+                }
+                if (!hash_equals(strtolower((string) $before['email']), $confirmEmail)) {
+                    $pdo->rollBack();
+                    json_response(['error' => 'Enter the account email exactly to confirm anonymization.'], 422);
+                }
+
+                $redactedEmail = 'archived-' . substr(str_replace('-', '', $id), 0, 20) . '@redacted.invalid';
+                $passwordHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+                $update = $pdo->prepare(
+                    "UPDATE users
+                     SET full_name = 'Former NovaLink User', email = ?, requested_address = NULL,
+                         password_hash = ?, email_verified = 0, email_verified_at = NULL,
+                         force_password_change = 1, failed_login_attempts = 0,
+                         locked_until = NULL, anonymized_at = UTC_TIMESTAMP()
+                     WHERE user_id = ?"
+                );
+                $update->execute([$redactedEmail, $passwordHash, $id]);
+                $pdo->prepare('DELETE FROM homeowner_user_links WHERE user_id = ?')->execute([$id]);
+                $pdo->prepare('DELETE FROM password_reset_tokens WHERE user_id = ?')->execute([$id]);
+                $pdo->prepare('DELETE FROM email_verification_tokens WHERE email = ?')->execute([$before['email']]);
+                $pdo->prepare('DELETE FROM notification_preferences WHERE user_id = ?')->execute([$id]);
+                if (enhanced_notifications_available($pdo)) {
+                    $redactNotifications = $pdo->prepare(
+                        "UPDATE notifications
+                         SET recipient_email = ?, recipient_name = 'Former NovaLink User',
+                             subject = 'Archived notification',
+                             message_text = 'Notification content removed during account anonymization.'
+                         WHERE recipient_user_id = ? OR recipient_email = ?"
+                    );
+                    $redactNotifications->execute([$redactedEmail, $id, $before['email']]);
+                }
+                $scrubAudit = $pdo->prepare(
+                    "UPDATE audit_logs SET before_json = NULL, after_json = JSON_OBJECT('account', 'anonymized')
+                     WHERE entity_type = 'user' AND entity_id = ?"
+                );
+                $scrubAudit->execute([$id]);
+                $pdo->commit();
+            } catch (Throwable $error) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $error;
+            }
+            audit_log($pdo, $actor['id'], 'user.anonymize', 'user', $id, null, ['account' => 'anonymized']);
+            json_response(['success' => true]);
         }
 
         if ($action === 'update') {
@@ -589,6 +685,84 @@ try {
             ]);
             json_response(['success' => true, 'emailDelivered' => true]);
         }
+    }
+
+    if ($resource === 'notification-preferences') {
+        $actor = require_auth($pdo);
+        if (!enhanced_notifications_available($pdo)) {
+            json_response(['error' => 'Notification preferences require database migration 005.'], 409);
+        }
+        if ($action !== 'update') {
+            json_response(['error' => 'Unknown notification-preference action.'], 400);
+        }
+        $category = require_choice($input, 'category', notification_categories());
+        if ($category === 'account') {
+            json_response(['error' => 'Security and account notifications are required and cannot be disabled.'], 422);
+        }
+        $emailEnabled = ($input['emailEnabled'] ?? null) === true;
+        $inAppEnabled = ($input['inAppEnabled'] ?? null) === true;
+        $before = fetch_row(
+            $pdo,
+            'SELECT email_enabled AS emailEnabled, in_app_enabled AS inAppEnabled
+             FROM notification_preferences WHERE user_id = ? AND notification_category = ? LIMIT 1',
+            [$actor['id'], $category]
+        );
+        $statement = $pdo->prepare(
+            'INSERT INTO notification_preferences
+             (user_id, notification_category, email_enabled, in_app_enabled)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE email_enabled = VALUES(email_enabled), in_app_enabled = VALUES(in_app_enabled)'
+        );
+        $statement->execute([$actor['id'], $category, $emailEnabled ? 1 : 0, $inAppEnabled ? 1 : 0]);
+        audit_log($pdo, $actor['id'], 'notification.preference_update', 'user', $actor['id'], $before, [
+            'category' => $category,
+            'emailEnabled' => $emailEnabled,
+            'inAppEnabled' => $inAppEnabled,
+        ]);
+        json_response(['success' => true]);
+    }
+
+    if ($resource === 'notifications') {
+        if ($action === 'retry') {
+            $actor = require_auth($pdo, ['admin']);
+            if (!enhanced_notifications_available($pdo)) {
+                json_response(['error' => 'Email retries require database migration 005.'], 409);
+            }
+            enforce_rate_limit($pdo, 'notification-retry', $actor['id'], 20, 3600, 3600);
+            $id = required_string($input, 'id', 36, 'Notification ID');
+            try {
+                $result = (new EmailService($pdo))->retryNotification($id);
+            } catch (RuntimeException $error) {
+                json_response(['error' => $error->getMessage()], 422);
+            }
+            audit_log($pdo, $actor['id'], 'notification.retry', 'notification', $id, null, [
+                'success' => (bool) ($result['success'] ?? false),
+            ]);
+            json_response(['success' => true, 'emailDelivered' => (bool) ($result['success'] ?? false)]);
+        }
+
+        $actor = require_auth($pdo);
+        if (!enhanced_notifications_available($pdo)) {
+            json_response(['error' => 'In-app notifications require database migration 005.'], 409);
+        }
+        if ($action === 'mark-read') {
+            $id = required_string($input, 'id', 36, 'Notification ID');
+            $statement = $pdo->prepare(
+                'UPDATE notifications SET read_at = COALESCE(read_at, UTC_TIMESTAMP())
+                 WHERE notification_id = ? AND recipient_user_id = ? AND in_app_visible = 1'
+            );
+            $statement->execute([$id, $actor['id']]);
+            json_response(['success' => true]);
+        }
+        if ($action === 'mark-all-read') {
+            $statement = $pdo->prepare(
+                'UPDATE notifications SET read_at = UTC_TIMESTAMP()
+                 WHERE recipient_user_id = ? AND in_app_visible = 1 AND read_at IS NULL'
+            );
+            $statement->execute([$actor['id']]);
+            json_response(['success' => true, 'updated' => $statement->rowCount()]);
+        }
+        json_response(['error' => 'Unknown notification action.'], 400);
     }
 
     if ($resource === 'homeowners') {

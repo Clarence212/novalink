@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
-import { AlertTriangle, Inbox, LoaderCircle, X } from 'lucide-react';
+import { AlertTriangle, Inbox, X } from 'lucide-react';
 
 export const buttonStyles = {
   primary: 'ui-button bg-blue-600 text-white hover:bg-blue-500 focus-visible:ring-blue-400',
@@ -51,10 +51,54 @@ export const EmptyState = ({ icon: Icon = Inbox, title, description, action }) =
   </div>
 );
 
-export const LoadingPanel = ({ label = 'Loading current information…' }) => (
-  <div className="flex min-h-48 flex-col items-center justify-center text-center text-slate-400" role="status" aria-live="polite">
-    <LoaderCircle className="h-7 w-7 animate-spin text-blue-400" />
-    <p className="mt-3 text-sm font-medium">{label}</p>
+const SkeletonBlock = ({ className = '' }) => <div className={`animate-pulse rounded-lg bg-slate-800 ${className}`} aria-hidden="true" />;
+
+export const DashboardSkeleton = () => (
+  <div className="space-y-6 p-4 sm:p-6 lg:p-8" role="status" aria-live="polite" aria-busy="true">
+    <span className="sr-only">Loading dashboard data…</span>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-3 w-24" />
+        <SkeletonBlock className="h-8 w-56 max-w-[75vw]" />
+        <SkeletonBlock className="h-4 w-72 max-w-[85vw]" />
+      </div>
+      <SkeletonBlock className="h-10 w-32" />
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {[0, 1, 2, 3].map((item) => (
+        <div key={item} className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 space-y-3">
+              <SkeletonBlock className="h-3 w-24" />
+              <SkeletonBlock className="h-8 w-16" />
+              <SkeletonBlock className="h-3 w-full max-w-36" />
+            </div>
+            <SkeletonBlock className="h-10 w-10 rounded-xl" />
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+        <SkeletonBlock className="h-5 w-40" />
+        <div className="mt-6 space-y-4">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <div key={item} className="flex items-center gap-4 border-b border-slate-800 pb-4 last:border-0">
+              <SkeletonBlock className="h-9 w-9 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-2"><SkeletonBlock className="h-3 w-2/3" /><SkeletonBlock className="h-3 w-1/3" /></div>
+              <SkeletonBlock className="hidden h-7 w-20 sm:block" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+        <SkeletonBlock className="h-5 w-32" />
+        <SkeletonBlock className="mt-6 h-44 w-full rounded-xl" />
+        <div className="mt-5 space-y-3"><SkeletonBlock className="h-3 w-full" /><SkeletonBlock className="h-3 w-5/6" /><SkeletonBlock className="h-3 w-2/3" /></div>
+      </div>
+    </div>
   </div>
 );
 

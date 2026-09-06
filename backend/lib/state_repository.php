@@ -9,6 +9,27 @@ function system_setting(PDO $pdo, string $key, string $default): string
     return $value === false ? $default : (string) $value;
 }
 
+function enhanced_notifications_available(PDO $pdo): bool
+{
+    return database_has_columns($pdo, 'notifications', [
+        'recipient_name', 'notification_category', 'in_app_visible', 'read_at',
+        'retry_count', 'last_attempt_at',
+    ]) && database_has_columns($pdo, 'notification_preferences', [
+        'user_id', 'notification_category', 'email_enabled', 'in_app_enabled',
+    ]);
+}
+
+function account_lifecycle_available(PDO $pdo): bool
+{
+    return database_has_columns($pdo, 'users', ['archived_at', 'anonymized_at'])
+        && str_contains(database_column_type($pdo, 'users', 'account_status'), "'archived'");
+}
+
+function notification_categories(): array
+{
+    return ['account', 'announcements', 'payments', 'reservations', 'concerns', 'records', 'general'];
+}
+
 function ensure_current_month_dues(PDO $pdo): int
 {
     $billingMonth = gmdate('Y-m-01');
@@ -69,6 +90,9 @@ function refresh_financial_state(PDO $pdo): void
 
 function fetch_users(PDO $pdo): array
 {
+    $lifecycleColumns = account_lifecycle_available($pdo)
+        ? ', u.archived_at AS archivedAt, u.anonymized_at AS anonymizedAt'
+        : ', NULL AS archivedAt, NULL AS anonymizedAt';
     $rows = $pdo->query(
         "SELECT u.user_id AS id, r.role_name AS role, u.full_name AS fullName,
                 u.email, u.requested_address AS requestedAddress,
@@ -77,7 +101,7 @@ function fetch_users(PDO $pdo): array
                 u.failed_login_attempts AS failedLoginAttempts, u.locked_until AS lockedUntil,
                 u.last_login_at AS lastLoginAt, u.approved_at AS approvedAt,
                 approver.full_name AS approvedByName, u.created_at AS createdAt,
-                u.updated_at AS updatedAt
+                u.updated_at AS updatedAt{$lifecycleColumns}
          FROM users u
          JOIN roles r ON r.role_id = u.role_id
          LEFT JOIN homeowner_user_links hul ON hul.user_id = u.user_id
@@ -473,12 +497,70 @@ function fetch_announcements(PDO $pdo, bool $includeNonPublished = false): array
 
 function fetch_notifications(PDO $pdo): array
 {
+    if (!enhanced_notifications_available($pdo)) {
+        return $pdo->query(
+            "SELECT notification_id AS id, recipient_email AS `to`, subject, message_text AS body,
+                    notification_type AS type, 'general' AS category,
+                    delivery_status AS status, COALESCE(sent_at, created_at) AS sentAt,
+                    failure_reason AS failureReason, 0 AS retryCount, created_at AS createdAt
+             FROM notifications ORDER BY created_at DESC LIMIT 500"
+        )->fetchAll();
+    }
     return $pdo->query(
-        "SELECT notification_id AS id, recipient_email AS `to`, subject, message_text AS body,
-                delivery_status AS status, COALESCE(sent_at, created_at) AS sentAt,
-                failure_reason AS failureReason
+        "SELECT notification_id AS id, recipient_email AS `to`, recipient_name AS recipientName,
+                notification_type AS type, notification_category AS category, subject,
+                message_text AS body, delivery_status AS status,
+                COALESCE(sent_at, last_attempt_at, created_at) AS sentAt,
+                failure_reason AS failureReason, retry_count AS retryCount,
+                last_attempt_at AS lastAttemptAt, created_at AS createdAt
          FROM notifications ORDER BY created_at DESC LIMIT 500"
     )->fetchAll();
+}
+
+function fetch_user_notifications(PDO $pdo, string $userId): array
+{
+    if (!enhanced_notifications_available($pdo)) {
+        return [];
+    }
+    $statement = $pdo->prepare(
+        "SELECT notification_id AS id, notification_type AS type,
+                notification_category AS category, subject, message_text AS body,
+                delivery_status AS emailStatus, read_at AS readAt, created_at AS createdAt
+         FROM notifications
+         WHERE recipient_user_id = ? AND in_app_visible = 1
+         ORDER BY created_at DESC LIMIT 100"
+    );
+    $statement->execute([$userId]);
+    return $statement->fetchAll();
+}
+
+function fetch_notification_preferences(PDO $pdo, string $userId): array
+{
+    $preferences = [];
+    foreach (notification_categories() as $category) {
+        $preferences[$category] = [
+            'emailEnabled' => true,
+            'inAppEnabled' => true,
+            'required' => $category === 'account',
+        ];
+    }
+    if (!enhanced_notifications_available($pdo)) {
+        return $preferences;
+    }
+    $statement = $pdo->prepare(
+        'SELECT notification_category, email_enabled, in_app_enabled
+         FROM notification_preferences WHERE user_id = ?'
+    );
+    $statement->execute([$userId]);
+    foreach ($statement->fetchAll() as $row) {
+        $category = (string) $row['notification_category'];
+        if (!isset($preferences[$category]) || $category === 'account') {
+            continue;
+        }
+        $preferences[$category]['emailEnabled'] = (bool) $row['email_enabled'];
+        $preferences[$category]['inAppEnabled'] = (bool) $row['in_app_enabled'];
+    }
+    return $preferences;
 }
 
 function fetch_payment_qr(PDO $pdo): array
@@ -512,6 +594,10 @@ function fetch_application_state(PDO $pdo, array $user): array
         'stickerRenewals' => $role === 'admin' ? fetch_sticker_renewals($pdo) : ($role === 'resident' ? fetch_sticker_renewals($pdo, $homeownerId) : []),
         'facilities' => fetch_facilities($pdo, $role === 'admin'),
         'emailLog' => $role === 'admin' ? fetch_notifications($pdo) : [],
+        'notifications' => fetch_user_notifications($pdo, $user['id']),
+        'notificationPreferences' => fetch_notification_preferences($pdo, $user['id']),
+        'notificationPreferencesReady' => enhanced_notifications_available($pdo),
+        'accountLifecycleReady' => account_lifecycle_available($pdo),
         'paymentQRCode' => $role === 'resident' || $role === 'admin' ? fetch_payment_qr($pdo) : [],
         'duesSettings' => $role === 'resident' || $role === 'admin' ? [
             'monthlyDueAmount' => (float) system_setting($pdo, 'monthly_due_amount', '1500.00'),

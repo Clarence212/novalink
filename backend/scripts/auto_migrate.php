@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/database.php';
 $requirements = [
     'schema_migrations' => ['migration_id', 'applied_at'],
     'roles' => ['role_id', 'role_name'],
-    'users' => ['user_id', 'role_id', 'full_name', 'email', 'requested_address', 'password_hash', 'account_status', 'email_verified', 'email_verified_at', 'approved_by_user_id', 'approved_at', 'force_password_change', 'failed_login_attempts', 'locked_until', 'last_login_at', 'created_at', 'updated_at'],
+    'users' => ['user_id', 'role_id', 'full_name', 'email', 'requested_address', 'password_hash', 'account_status', 'email_verified', 'email_verified_at', 'approved_by_user_id', 'approved_at', 'force_password_change', 'failed_login_attempts', 'locked_until', 'last_login_at', 'archived_at', 'anonymized_at', 'created_at', 'updated_at'],
     'email_verification_tokens' => ['token_id', 'email', 'full_name', 'contact_number', 'purpose', 'code_hash', 'action_token_hash', 'attempt_count', 'expires_at', 'verified_at', 'consumed_at', 'created_at'],
     'password_reset_tokens' => ['reset_id', 'user_id', 'token_hash', 'expires_at', 'used_at', 'created_at'],
     'homeowners' => ['homeowner_id', 'user_id', 'owner_name', 'block_lot', 'street', 'contact_number', 'email', 'record_status', 'created_at', 'updated_at'],
@@ -32,7 +32,8 @@ $requirements = [
     'visitor_logs' => ['visitor_log_id', 'visitor_name', 'contact_number', 'purpose', 'destination_address', 'vehicle_plate', 'entry_time', 'exit_time', 'recorded_by_user_id', 'updated_by_user_id'],
     'concerns' => ['concern_id', 'homeowner_id', 'submitted_by_user_id', 'responded_by_user_id', 'concern_type', 'subject', 'description', 'status', 'admin_response', 'submitted_at', 'responded_at', 'updated_at'],
     'announcements' => ['announcement_id', 'posted_by_user_id', 'title', 'content', 'priority', 'status', 'published_at', 'created_at', 'updated_at'],
-    'notifications' => ['notification_id', 'recipient_user_id', 'recipient_email', 'notification_type', 'subject', 'message_text', 'delivery_status', 'provider_message_id', 'failure_reason', 'sent_at', 'created_at'],
+    'notifications' => ['notification_id', 'recipient_user_id', 'recipient_email', 'recipient_name', 'notification_type', 'notification_category', 'subject', 'message_text', 'delivery_status', 'in_app_visible', 'read_at', 'retry_count', 'last_attempt_at', 'provider_message_id', 'failure_reason', 'sent_at', 'created_at'],
+    'notification_preferences' => ['user_id', 'notification_category', 'email_enabled', 'in_app_enabled', 'updated_at'],
     'audit_logs' => ['audit_id', 'actor_user_id', 'action_name', 'entity_type', 'entity_id', 'before_json', 'after_json', 'ip_address', 'user_agent', 'created_at'],
     'rate_limits' => ['rate_key', 'action_name', 'attempts', 'window_started_at', 'blocked_until', 'updated_at'],
     'system_settings' => ['setting_key', 'setting_value', 'updated_by_user_id', 'updated_at'],
@@ -90,6 +91,10 @@ try {
         $migration->execute(['004_household_account_links']);
         if ((int) $migration->fetchColumn() !== 1) {
             $errors[] = 'missing schema migration 004_household_account_links';
+        }
+        $migration->execute(['005_enterprise_notifications_lifecycle']);
+        if ((int) $migration->fetchColumn() !== 1) {
+            $errors[] = 'missing schema migration 005_enterprise_notifications_lifecycle';
         }
     }
 

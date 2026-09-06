@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(190) NOT NULL UNIQUE,
   requested_address VARCHAR(190) NULL,
   password_hash VARCHAR(255) NOT NULL,
-  account_status ENUM('pending', 'active', 'rejected', 'inactive') NOT NULL DEFAULT 'pending',
+  account_status ENUM('pending', 'active', 'rejected', 'inactive', 'archived') NOT NULL DEFAULT 'pending',
   email_verified TINYINT(1) NOT NULL DEFAULT 0,
   email_verified_at DATETIME NULL,
   approved_by_user_id CHAR(36) NULL,
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
   failed_login_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
   last_login_at DATETIME NULL,
+  archived_at DATETIME NULL,
+  anonymized_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(role_id),
@@ -380,10 +382,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   notification_id CHAR(36) PRIMARY KEY,
   recipient_user_id CHAR(36) NULL,
   recipient_email VARCHAR(190) NOT NULL,
+  recipient_name VARCHAR(120) NULL,
   notification_type VARCHAR(60) NOT NULL,
+  notification_category VARCHAR(40) NOT NULL DEFAULT 'general',
   subject VARCHAR(200) NOT NULL,
   message_text TEXT NOT NULL,
-  delivery_status ENUM('queued', 'sent', 'failed') NOT NULL DEFAULT 'queued',
+  delivery_status ENUM('queued', 'sent', 'failed', 'suppressed') NOT NULL DEFAULT 'queued',
+  in_app_visible TINYINT(1) NOT NULL DEFAULT 0,
+  read_at DATETIME NULL,
+  retry_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  last_attempt_at DATETIME NULL,
   provider_message_id VARCHAR(255) NULL,
   failure_reason VARCHAR(255) NULL,
   sent_at DATETIME NULL,
@@ -391,6 +399,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
   INDEX idx_notifications_recipient (recipient_user_id, created_at),
   INDEX idx_notifications_delivery (delivery_status, created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id CHAR(36) NOT NULL,
+  notification_category VARCHAR(40) NOT NULL,
+  email_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  in_app_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, notification_category),
+  CONSTRAINT fk_notification_preferences_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -446,4 +464,8 @@ ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);
 
 INSERT INTO schema_migrations (migration_id)
 VALUES ('004_household_account_links')
+ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);
+
+INSERT INTO schema_migrations (migration_id)
+VALUES ('005_enterprise_notifications_lifecycle')
 ON DUPLICATE KEY UPDATE migration_id = VALUES(migration_id);

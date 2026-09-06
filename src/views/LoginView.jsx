@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bell,
@@ -12,9 +12,11 @@ import {
   Loader2,
   Lock,
   Mail,
+  RefreshCw,
   ShieldCheck,
   UserCheck,
   Users,
+  WifiOff,
   X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -30,7 +32,13 @@ const EMPTY_REGISTRATION = {
   acceptedTerms: false,
 };
 
-export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
+export const LoginView = ({
+  onLoginSuccess,
+  onGuestMode,
+  sessionChecking = false,
+  connectionError = '',
+  onRetryConnection,
+}) => {
   const { login, setIsGuestMode, showToast, createUserAccount, updatePassword } = useApp();
 
   const [email, setEmail] = useState('');
@@ -38,9 +46,14 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginErrorType, setLoginErrorType] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  const emailInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
+  const retryButtonRef = useRef(null);
+  const signInLockRef = useRef(false);
 
   const [regData, setRegData] = useState(EMPTY_REGISTRATION);
   const [regStep, setRegStep] = useState(1);
@@ -66,6 +79,15 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [regResendSeconds]);
+
+  useEffect(() => {
+    if (sessionChecking) return;
+    if (connectionError) {
+      retryButtonRef.current?.focus();
+      return;
+    }
+    emailInputRef.current?.focus();
+  }, [connectionError, sessionChecking]);
 
   const passwordChecks = {
     length: regData.password.length >= 12,
@@ -95,26 +117,47 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
     resetRegistration();
   };
 
-  const handleSignIn = async (e) => {
-    e.preventDefault();
+  const handleSignIn = async (event) => {
+    event?.preventDefault();
+    if (signInLockRef.current || sessionChecking) return;
+    signInLockRef.current = true;
     setLoginError('');
+    setLoginErrorType('');
     setIsSigningIn(true);
     try {
-      const result = await login(email, password, rememberMe);
+      const result = await login(email.trim(), password, rememberMe);
       if (!result.success) {
         setLoginError(result.message || 'Sign-in failed. Check your details and try again.');
+        setLoginErrorType(result.retryable ? 'connection' : 'credentials');
         if (result.code === 'EMAIL_VERIFICATION_REQUIRED') {
           setAccountVerificationEmail(email.trim());
           setAccountVerificationOtp('');
           setActiveModal('verify-account');
+        } else {
+          window.requestAnimationFrame(() => {
+            (result.retryable ? retryButtonRef.current : passwordInputRef.current)?.focus();
+          });
         }
         return;
       }
       showToast('Signed in successfully!', 'success');
       if (onLoginSuccess) onLoginSuccess();
+    } catch (error) {
+      setLoginError(error.message || 'NovaLink could not reach the server. Check your connection and try again.');
+      setLoginErrorType('connection');
+      window.requestAnimationFrame(() => retryButtonRef.current?.focus());
     } finally {
+      signInLockRef.current = false;
       setIsSigningIn(false);
     }
+  };
+
+  const retryConnection = () => {
+    if (loginErrorType === 'connection') {
+      handleSignIn();
+      return;
+    }
+    onRetryConnection?.();
   };
 
   const updateCapsLockState = (event) => {
@@ -279,31 +322,31 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
-      <div className="flex flex-1 items-center justify-center px-4 py-8">
+    <div className="min-h-screen overflow-x-hidden bg-slate-900 flex flex-col">
+      <div className="flex flex-1 items-stretch justify-center px-0 py-0 sm:items-center sm:px-4 sm:py-8">
         { }
-        <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl shadow-black/25 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[680px]">
+        <div className="grid min-h-0 w-full max-w-6xl grid-cols-1 overflow-hidden bg-white shadow-2xl shadow-black/25 sm:rounded-3xl md:min-h-[680px] md:grid-cols-12">
 
         { }
-        <div className="md:col-span-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-8 lg:p-12 text-white flex flex-col justify-between relative overflow-hidden">
+        <div className="relative flex flex-col justify-between overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-600 p-6 text-white sm:p-8 md:col-span-6 lg:p-12">
           { }
           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
           <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-blue-400/20 blur-3xl pointer-events-none"></div>
 
           { }
-          <div className="relative z-10 space-y-6 text-center flex flex-col items-center">
-            <div className="mb-6">
-              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="w-36 h-36 lg:w-40 lg:h-40 object-contain drop-shadow-xl mx-auto" />
+          <div className="relative z-10 flex flex-col items-center space-y-4 text-center sm:space-y-6">
+            <div className="mb-1 sm:mb-6">
+              <img src="/NHAI_Insignia.png" alt="NHAI Insignia" className="mx-auto h-24 w-24 object-contain drop-shadow-xl sm:h-36 sm:w-36 lg:h-40 lg:w-40" />
             </div>
 
             <div>
-              <h1 className="text-3xl lg:text-4xl font-black tracking-tight text-white">NovaLink Portal</h1>
-              <p className="text-blue-100 font-medium text-base mt-1">PUBLIC BETA TESTING</p>
+              <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">NovaLink Portal</h1>
+              <p className="mt-1 text-xs font-medium text-blue-100 sm:text-base">PUBLIC BETA TESTING</p>
             </div>
           </div>
 
           { }
-          <div className="relative z-10 space-y-6 my-8">
+          <div className="relative z-10 my-8 hidden space-y-6 sm:block">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
                 <Users className="w-6 h-6 text-white" />
@@ -341,62 +384,93 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
             </div>
           </div>
 
-          <div className="relative z-10 text-xs text-blue-200/80 font-medium">
+          <div className="relative z-10 mt-5 hidden text-xs font-medium text-blue-200/80 sm:block">
             Novaville Homeowners Association, Inc. © 2026
           </div>
         </div>
 
         { }
-        <div className="md:col-span-6 p-8 lg:p-12 bg-white flex flex-col justify-between text-slate-800">
+        <div className="flex flex-col justify-between bg-white p-6 text-slate-800 sm:p-8 md:col-span-6 lg:p-12">
           <div>
             { }
-            <div className="mb-8">
+            <div className="mb-6 sm:mb-8">
               <h2 className="text-2xl lg:text-3xl font-bold text-slate-900">Welcome Back</h2>
               <p className="text-slate-500 text-xs mt-1">Sign in to continue to your dashboard</p>
             </div>
 
             { }
-            <form onSubmit={handleSignIn} className="space-y-4">
+            {(loginErrorType === 'connection' ? loginError : connectionError) && (
+              <div className="mb-4 border-l-2 border-amber-500 bg-amber-50 px-3 py-3 text-xs text-amber-950" role="alert">
+                <div className="flex items-start gap-2.5">
+                  <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">Unable to connect to NovaLink</p>
+                    <p className="mt-1 leading-5">{loginErrorType === 'connection' ? loginError : connectionError}</p>
+                    <button
+                      ref={retryButtonRef}
+                      type="button"
+                      onClick={retryConnection}
+                      disabled={isSigningIn || sessionChecking}
+                      className="mt-2 inline-flex items-center gap-1.5 font-bold text-amber-900 underline decoration-amber-500 underline-offset-2 hover:text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isSigningIn || sessionChecking ? 'animate-spin' : ''}`} />
+                      {isSigningIn || sessionChecking ? 'Retrying…' : 'Retry connection'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSignIn} autoComplete="on" className="space-y-4" aria-busy={isSigningIn}>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+                <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
+                    id="login-email"
+                    name="email"
+                    ref={emailInputRef}
                     required
-                    autoComplete="email"
+                    autoComplete="username"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     placeholder="Email"
                     value={email}
-                    onChange={(e) => { setEmail(e.target.value); setLoginError(''); }}
-                    aria-invalid={Boolean(loginError)}
-                    aria-describedby={loginError ? 'login-error' : undefined}
+                    onChange={(e) => { setEmail(e.target.value); setLoginError(''); setLoginErrorType(''); }}
+                    aria-invalid={loginErrorType === 'credentials'}
+                    aria-describedby={loginErrorType === 'credentials' ? 'login-error' : undefined}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+                <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    id="login-password"
+                    name="password"
+                    ref={passwordInputRef}
                     required
                     autoComplete="current-password"
                     placeholder="Password"
                     value={password}
-                    onChange={(e) => { setPassword(e.target.value); setLoginError(''); }}
+                    onChange={(e) => { setPassword(e.target.value); setLoginError(''); setLoginErrorType(''); }}
                     onKeyDown={updateCapsLockState}
                     onKeyUp={updateCapsLockState}
                     onBlur={() => setCapsLockOn(false)}
-                    aria-invalid={Boolean(loginError)}
-                    aria-describedby={[capsLockOn ? 'caps-lock-warning' : '', loginError ? 'login-error' : ''].filter(Boolean).join(' ') || undefined}
+                    aria-invalid={loginErrorType === 'credentials'}
+                    aria-describedby={[capsLockOn ? 'caps-lock-warning' : '', loginErrorType === 'credentials' ? 'login-error' : ''].filter(Boolean).join(' ') || undefined}
                     className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition bg-slate-50/50"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
                   >
@@ -406,13 +480,14 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                 {capsLockOn && <p id="caps-lock-warning" className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700" role="status"><CircleAlert className="h-3.5 w-3.5" /> Caps Lock is on</p>}
               </div>
 
-              {loginError && <div id="login-error" className="flex items-start gap-2 border-l-2 border-red-500 bg-red-50 px-3 py-2.5 text-xs font-medium leading-5 text-red-800" role="alert"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><span>{loginError}</span></div>}
+              {loginError && loginErrorType === 'credentials' && <div id="login-error" className="flex items-start gap-2 border-l-2 border-red-500 bg-red-50 px-3 py-2.5 text-xs font-medium leading-5 text-red-800" role="alert"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><span>{loginError}</span></div>}
 
               <div className="flex items-center justify-between gap-3 text-xs pt-1">
                 <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-600">
                   <span className="relative h-4 w-4 shrink-0">
                     <input
                       type="checkbox"
+                      name="remember-session"
                       checked={rememberMe}
                       onChange={(event) => setRememberMe(event.target.checked)}
                       className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-slate-300 bg-white transition checked:border-blue-600 checked:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
@@ -424,7 +499,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
                 <button
                   type="button"
                   onClick={() => setActiveModal('forgot')}
-                  className="text-blue-600 hover:text-blue-700 font-semibold text-xs transition"
+                  className="rounded text-blue-600 hover:text-blue-700 font-semibold text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 >
                   Forgot password?
                 </button>
@@ -433,7 +508,8 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
               { }
               <button
                 type="submit"
-                disabled={isSigningIn}
+                disabled={isSigningIn || sessionChecking}
+                aria-disabled={isSigningIn || sessionChecking}
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition transform active:scale-[0.99] mt-2"
               >
                 {isSigningIn ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Signing in…</span> : 'Sign In'}
@@ -444,6 +520,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
             <div className="text-center text-xs text-slate-600 my-5">
               Don't have an account?{' '}
               <button
+                type="button"
                 onClick={openRegistration}
                 className="text-blue-600 hover:text-blue-700 font-bold underline underline-offset-2 transition"
               >
@@ -459,6 +536,7 @@ export const LoginView = ({ onLoginSuccess, onGuestMode }) => {
 
             {/* Guest mode button */}
             <button
+              type="button"
               onClick={handleGuestAccess}
               className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/50 hover:bg-blue-50/50 text-slate-700 hover:text-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition"
             >

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
-  CheckCircle, Clock3, Edit2, History, KeyRound, LockOpen, MailCheck,
-  Search, ShieldAlert, UserCheck, UserPlus, UserX, X, XCircle,
+  Archive, CheckCircle, Clock3, Edit2, Eraser, History, KeyRound, LockOpen, MailCheck,
+  RotateCcw, Search, ShieldAlert, UserCheck, UserPlus, UserX, X, XCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ConfirmDialog, EmptyState } from '../components/ui/Primitives';
@@ -12,6 +12,7 @@ const statusBadge = (status) => {
     pending: 'bg-amber-900/60 text-amber-400',
     rejected: 'bg-red-900/60 text-red-400',
     inactive: 'bg-slate-700 text-slate-400',
+    archived: 'bg-violet-950 text-violet-300',
   };
   return <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold capitalize ${styles[status] || styles.inactive}`}>{status}</span>;
 };
@@ -92,6 +93,7 @@ const HISTORY_LABELS = {
   'user.verification_resent': 'Verification email resent',
   'user.email_verified': 'Account email verified',
   'user.homeowner_linked': 'Linked to a homeowner record',
+  'user.anonymize': 'Archived account data anonymized',
 };
 
 const historyDetail = (entry) => {
@@ -116,7 +118,7 @@ export const UserManagement = () => {
   const {
     users = [], homeowners = [], currentUser = null, createUserAccount, approveUser, rejectUser,
     deactivateUser, reactivateUser, editUser, unlockUser, forceUserPasswordReset,
-    resendUserVerification,
+    resendUserVerification, archiveUser, anonymizeUser, accountLifecycleReady,
   } = useApp();
   const safeUsers = Array.isArray(users) ? users : [];
   const safeHomeowners = Array.isArray(homeowners) ? homeowners : [];
@@ -130,6 +132,8 @@ export const UserManagement = () => {
   const [roleChangeConfirmed, setRoleChangeConfirmed] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const [confirmationReason, setConfirmationReason] = useState('');
+  const [anonymizingUser, setAnonymizingUser] = useState(null);
+  const [anonymizeEmail, setAnonymizeEmail] = useState('');
   const [newUserData, setNewUserData] = useState({
     fullName: '', email: '', password: '', role: 'admin', homeownerId: '',
   });
@@ -204,6 +208,7 @@ export const UserManagement = () => {
   const pendingCount = safeUsers.filter((user) => user?.status === 'pending').length;
   const lockedCount = safeUsers.filter(isLocked).length;
   const unverifiedCount = safeUsers.filter((user) => !user?.emailVerified).length;
+  const archivedCount = safeUsers.filter((user) => user?.status === 'archived').length;
   const roleChanged = Boolean(editingUser && editData.role !== editingUser.role);
   const homeownerChanged = Boolean(
     editingUser
@@ -224,11 +229,12 @@ export const UserManagement = () => {
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
           { label: 'Pending approval', value: pendingCount, icon: Clock3, color: 'text-amber-400' },
           { label: 'Currently locked', value: lockedCount, icon: ShieldAlert, color: 'text-red-400' },
           { label: 'Email unverified', value: unverifiedCount, icon: MailCheck, color: 'text-sky-400' },
+          { label: 'Archived accounts', value: archivedCount, icon: Archive, color: 'text-violet-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex items-center gap-3">
             <Icon className={`w-5 h-5 ${color}`} />
@@ -243,7 +249,7 @@ export const UserManagement = () => {
           <input type="search" placeholder="Search by name, email, or role..." value={search} onChange={(event) => setSearch(event.target.value)} className="flex-1 bg-transparent text-xs text-slate-300 placeholder:text-slate-500 focus:outline-none" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {['all', 'pending', 'active', 'inactive', 'rejected', 'locked'].map((status) => (
+          {['all', 'pending', 'active', 'inactive', 'rejected', 'archived', 'locked'].map((status) => (
             <button type="button" key={status} onClick={() => setFilterStatus(status)} className={`px-3 py-2 rounded-xl text-xs font-medium transition capitalize ${filterStatus === status ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'}`}>{status}</button>
           ))}
         </div>
@@ -267,13 +273,16 @@ export const UserManagement = () => {
                   <td data-label="Actions" className="px-5 py-4">
                     <div className="flex gap-1.5 flex-wrap max-w-[360px]">
                       {user.status === 'pending' && <><ActionButton disabled={rowBusy} onClick={() => withBusy(`approve-${user.id}`, () => approveUser(user.id))} className="bg-emerald-600/70 hover:bg-emerald-600"><CheckCircle className="w-3 h-3" /> Approve</ActionButton><ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `reject-${user.id}`, title: `Reject ${user.fullName}?`, description: 'This account will not be able to sign in or complete registration.', impact: 'The decision is reversible by reactivating the account, and the reason is recorded in its audit history.', confirmLabel: 'Reject account', requireReason: true, operation: (reason) => rejectUser(user.id, reason) })} className="bg-red-600/70 hover:bg-red-600"><XCircle className="w-3 h-3" /> Reject</ActionButton></>}
-                      {user.role === 'resident' && <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user, suggestedHousehold?.id || '')} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> {user.homeownerId ? 'Change address link' : suggestedHousehold ? 'Review address match' : 'Link address'}</ActionButton>}
-                      <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user)} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> Edit</ActionButton>
+                      {user.status !== 'archived' && user.role === 'resident' && <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user, suggestedHousehold?.id || '')} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> {user.homeownerId ? 'Change address link' : suggestedHousehold ? 'Review address match' : 'Link address'}</ActionButton>}
+                      {user.status !== 'archived' && <ActionButton disabled={rowBusy} onClick={() => handleEditOpen(user)} className="bg-blue-600/70 hover:bg-blue-600"><Edit2 className="w-3 h-3" /> Edit</ActionButton>}
                       {user.status === 'active' && user.id !== currentUser?.id && <ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `deactivate-${user.id}`, title: `Deactivate ${user.fullName}?`, description: 'The account will lose access immediately.', impact: 'Existing records remain intact. An administrator can reactivate the account later.', confirmLabel: 'Deactivate account', requireReason: true, operation: (reason) => deactivateUser(user.id, reason) })} className="bg-slate-600 hover:bg-slate-500"><UserX className="w-3 h-3" /> Deactivate</ActionButton>}
                       {(user.status === 'inactive' || user.status === 'rejected') && <ActionButton disabled={rowBusy} onClick={() => withBusy(`reactivate-${user.id}`, () => reactivateUser(user.id))} className="bg-emerald-600/70 hover:bg-emerald-600"><UserCheck className="w-3 h-3" /> Reactivate</ActionButton>}
-                      {!user.emailVerified && <ActionButton disabled={rowBusy} onClick={() => withBusy(`verify-${user.id}`, () => resendUserVerification(user.id))} className="bg-sky-600/70 hover:bg-sky-600"><MailCheck className="w-3 h-3" /> Resend verification</ActionButton>}
+                      {user.status === 'archived' && !user.anonymizedAt && <ActionButton disabled={rowBusy} onClick={() => withBusy(`restore-${user.id}`, () => reactivateUser(user.id))} className="bg-emerald-700 hover:bg-emerald-600"><RotateCcw className="w-3 h-3" /> Restore</ActionButton>}
+                      {accountLifecycleReady && user.status !== 'archived' && user.id !== currentUser?.id && <ActionButton disabled={rowBusy} onClick={() => requestConfirmation({ key: `archive-${user.id}`, title: `Archive ${user.fullName}?`, description: 'The account will lose access and any household link will be removed.', impact: 'Operational records and audit history remain. The account can be restored later until its personal data is anonymized.', confirmLabel: 'Archive account', requireReason: true, operation: (reason) => archiveUser(user.id, reason) })} className="bg-violet-700 hover:bg-violet-600"><Archive className="w-3 h-3" /> Archive</ActionButton>}
+                      {accountLifecycleReady && user.status === 'archived' && !user.anonymizedAt && <ActionButton disabled={rowBusy} onClick={() => { setAnonymizingUser(user); setAnonymizeEmail(''); }} className="bg-red-800 hover:bg-red-700"><Eraser className="w-3 h-3" /> Anonymize</ActionButton>}
+                      {!user.emailVerified && user.status !== 'archived' && <ActionButton disabled={rowBusy} onClick={() => withBusy(`verify-${user.id}`, () => resendUserVerification(user.id))} className="bg-sky-600/70 hover:bg-sky-600"><MailCheck className="w-3 h-3" /> Resend verification</ActionButton>}
                       {(locked || user.failedLoginAttempts > 0) && <ActionButton disabled={rowBusy} onClick={() => withBusy(`unlock-${user.id}`, () => unlockUser(user.id))} className="bg-emerald-700 hover:bg-emerald-600"><LockOpen className="w-3 h-3" /> Unlock</ActionButton>}
-                      {user.id !== currentUser?.id && user.status !== 'rejected' && <ActionButton disabled={rowBusy || user.forcePasswordChange} onClick={() => requestConfirmation({ key: `reset-${user.id}`, title: `Require a password change for ${user.fullName}?`, description: 'The user can continue only after setting a new private password at their next sign-in.', impact: 'This does not reveal or replace the current password.', confirmLabel: 'Require password change', tone: 'warning', operation: () => forceUserPasswordReset(user.id) })} className="bg-amber-700 hover:bg-amber-600"><KeyRound className="w-3 h-3" /> Force reset</ActionButton>}
+                      {user.id !== currentUser?.id && !['rejected', 'archived'].includes(user.status) && <ActionButton disabled={rowBusy || user.forcePasswordChange} onClick={() => requestConfirmation({ key: `reset-${user.id}`, title: `Require a password change for ${user.fullName}?`, description: 'The user can continue only after setting a new private password at their next sign-in.', impact: 'This does not reveal or replace the current password.', confirmLabel: 'Require password change', tone: 'warning', operation: () => forceUserPasswordReset(user.id) })} className="bg-amber-700 hover:bg-amber-600"><KeyRound className="w-3 h-3" /> Force reset</ActionButton>}
                       <ActionButton disabled={rowBusy} onClick={() => setHistoryUser(user)} className="bg-violet-700/80 hover:bg-violet-600"><History className="w-3 h-3" /> History</ActionButton>
                     </div>
                   </td>
@@ -330,6 +339,16 @@ export const UserManagement = () => {
               {(historyUser.history || []).length === 0 && <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-700 rounded-xl">No audit events recorded for this account yet.</div>}
             </div>
           </div>
+        </div>
+      )}
+      {anonymizingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-lg rounded-3xl border border-red-900/70 bg-slate-900 p-6 shadow-2xl" role="alertdialog" aria-modal="true" aria-labelledby="anonymize-title">
+            <div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-950 text-red-400"><Eraser className="h-5 w-5" /></span><div><h2 id="anonymize-title" className="text-lg font-bold text-slate-100">Permanently anonymize this account?</h2><p className="mt-1 text-sm leading-5 text-slate-400">Personal account details and notification content will be replaced. Operational records remain for association accounting and audit purposes.</p></div></div>
+            <div className="mt-4 rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-sm leading-5 text-red-200"><strong>This cannot be reversed.</strong> Restoring this account will no longer be possible.</div>
+            <label className="mt-5 block text-sm font-bold text-slate-300">Type <span className="text-slate-100">{anonymizingUser.email}</span> to confirm<input type="email" autoFocus value={anonymizeEmail} onChange={(event) => setAnonymizeEmail(event.target.value)} className="ui-input mt-2" placeholder="Account email" /></label>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setAnonymizingUser(null)} disabled={busyAction === `anonymize-${anonymizingUser.id}`} className="ui-button border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700">Cancel</button><button type="button" disabled={anonymizeEmail.trim().toLowerCase() !== anonymizingUser.email.toLowerCase() || busyAction === `anonymize-${anonymizingUser.id}`} onClick={async () => { const result = await withBusy(`anonymize-${anonymizingUser.id}`, () => anonymizeUser(anonymizingUser.id, anonymizeEmail.trim())); if (result.success) setAnonymizingUser(null); }} className="ui-button bg-red-600 text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500">{busyAction === `anonymize-${anonymizingUser.id}` ? 'Anonymizing…' : 'Anonymize permanently'}</button></div>
+          </section>
         </div>
       )}
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title} description={confirmation?.description} impact={confirmation?.impact} confirmLabel={confirmation?.confirmLabel} tone={confirmation?.tone || 'danger'} requireReason={confirmation?.requireReason} reason={confirmationReason} onReasonChange={setConfirmationReason} busy={busyAction === confirmation?.key} onCancel={() => !busyAction && setConfirmation(null)} onConfirm={runConfirmedAction} />
