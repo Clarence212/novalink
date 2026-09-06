@@ -22,7 +22,7 @@ import { ResidentConcerns } from './views/ResidentConcerns';
 import { VehicleManagement } from './views/VehicleManagement';
 import { StickerRenewals } from './views/StickerRenewals';
 import { GuestModeView } from './views/GuestModeView';
-import { DashboardSkeleton } from './components/ui/Primitives';
+import { DashboardSkeleton, LoadingPanel } from './components/ui/Primitives';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalPage } from './views/LegalPage';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
@@ -45,6 +45,14 @@ const AppContent = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
+        <LoadingPanel label="Connecting securely to NovaLink…" />
+      </div>
+    );
+  }
 
   if (!currentUser && !isGuestMode) {
     return (

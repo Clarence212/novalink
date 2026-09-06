@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
-import { AlertTriangle, Inbox, X } from 'lucide-react';
+import { AlertTriangle, Inbox, LoaderCircle, X } from 'lucide-react';
 
 export const buttonStyles = {
   primary: 'ui-button bg-blue-600 text-white hover:bg-blue-500 focus-visible:ring-blue-400',
@@ -48,6 +48,13 @@ export const EmptyState = ({ icon: Icon = Inbox, title, description, action }) =
     <p className="text-sm font-bold text-slate-200">{title}</p>
     {description && <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">{description}</p>}
     {action && <div className="mt-4">{action}</div>}
+  </div>
+);
+
+export const LoadingPanel = ({ label = 'Loading current information…' }) => (
+  <div className="flex min-h-48 flex-col items-center justify-center text-center text-slate-400" role="status" aria-live="polite">
+    <LoaderCircle className="h-7 w-7 animate-spin text-blue-400" />
+    <p className="mt-3 text-sm font-medium">{label}</p>
   </div>
 );
 
